@@ -402,7 +402,7 @@ class ProductionBuilder implements BuilderInterface
             self::SERVICE_BUILD,
             $this->serviceFactory->create(ServiceInterface::SERVICE_PHP_CLI, $phpVersion, ['volumes' => $volumesBuild]),
             [self::NETWORK_MAGENTO_BUILD],
-            self::$cliDepends
+            []
         );
         $manager->addService(
             self::SERVICE_DEPLOY,

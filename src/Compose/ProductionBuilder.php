@@ -212,6 +212,12 @@ class ProductionBuilder implements BuilderInterface
             ];
         }
 
+        if ($config->getMode() === BuilderFactory::BUILDER_PRODUCTION) {
+            foreach ($volumes as $volumeName => $volume) {
+                $volumes[$volumeName] = [];
+            }
+        }
+
         $manager->setVolumes($volumes);
 
         $volumesBuild = $this->volumeResolver->normalize(array_merge(

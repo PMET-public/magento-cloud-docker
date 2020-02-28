@@ -32,8 +32,7 @@ interface BuilderInterface
     public const SERVICE_CRON = 'cron';
     public const SERVICE_TEST = 'test';
 
-    public const NETWORK_MAGENTO = 'magento';
-    public const NETWORK_MAGENTO_BUILD = 'magento-build';
+    public const NETWORK_MAGENTO_BUILD = 'isolated-build';
 
     public const VOLUME_MAGENTO = 'magento';
     public const VOLUME_MAGENTO_VENDOR = 'magento-vendor';

@@ -12,7 +12,7 @@ namespace Magento\CloudDocker\Compose;
  */
 class Manager
 {
-    public const DOMAIN = 'magento2.docker';
+    //public const DOMAIN = 'magento2.docker';
 
     /**
      * @var string
@@ -42,17 +42,16 @@ class Manager
      */
     public function addService(string $name, array $extConfig, array $networks, array $depends): void
     {
-        $hostname = $name . '.' . self::DOMAIN;
 
         $config = [
-            'hostname' => $hostname,
+            'hostname' => $name,
         ];
 
         $config = array_replace($config, $extConfig);
 
         foreach ($networks as $network) {
             $config['networks'][$network] = [
-                'aliases' => [$hostname]
+                'aliases' => [$name]
             ];
         }
 

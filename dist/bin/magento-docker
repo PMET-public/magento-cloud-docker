@@ -49,6 +49,10 @@ case "$1" in
         docker-compose restart
         ;;
     ece-build)
+        # create containers but do not start
+        docker-compose up --no-start
+        # this simulates a git push just like cloud
+        git archive --format=tar HEAD | docker cp - $(docker-compose ps | grep _build_1 | awk '{print $1}'):/app/
         docker-compose run build cloud-build
         ;;
     ece-deploy)

@@ -6,7 +6,7 @@ set -e
 
 RUN_HOOKS="run-hooks"
 
-if [ "$MAGENTO_RUN_MODE" == "production" ]; then
+if [ "$MAGENTO_RUN_MODE" == "production" -a "$CLEAN_VENDOR_IN_PRODUCTION" == "true" ]; then
     echo "Cleaning directories."
 
     rm -rf $MAGENTO_ROOT/setup/*

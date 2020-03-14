@@ -53,6 +53,10 @@ class GeneratePhp extends Command
         'sudo',
         'unzip',
         'vim',
+        'iputils-ping',
+        'netcat',
+        'less',
+        'strace',
     ];
 
     private const PHP_EXTENSIONS_ENABLED_BY_DEFAULT = [

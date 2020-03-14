@@ -8,7 +8,6 @@ ENV DEBUG false
 ENV MAGENTO_RUN_MODE production
 ENV UPDATE_UID_GID false
 ENV COMPOSER_ALLOW_SUPERUSER 1
-ENV CLEAN_VENDOR_IN_PRODUCTION true
 
 ENV PHP_EXTENSIONS bcmath bz2 calendar exif gd gettext intl mysqli opcache pdo_mysql redis soap sockets sysvmsg sysvsem sysvshm xsl zip pcntl
 
@@ -34,6 +33,10 @@ RUN apt-get update \
   sudo \
   unzip \
   vim \
+  iputils-ping \
+  netcat \
+  less \
+  strace \
   libbz2-dev \
   libjpeg62-turbo-dev \
   libpng-dev \

@@ -51,8 +51,14 @@ case "$1" in
     ece-build)
         # create containers but do not start
         docker-compose up --no-start
+        prefix=$(docker-compose ps | sed -n 's/_build_1 .*$//p')
+        # copy db files for importing
+        docker cp .docker/mysql/docker-entrypoint-initdb.d ${prefix}_db_1:/
         # this simulates a git push just like cloud
-        git archive --format=tar HEAD | docker cp - $(docker-compose ps | grep _build_1 | awk '{print $1}'):/app/
+        git archive HEAD | docker cp - ${prefix}_build_1:/app/
+        # copy over crypt key
+        docker cp app/etc/env.php ${prefix}_deploy_1:/app/app/etc/env.php
+        docker-compose start
         docker-compose run build cloud-build
         ;;
     ece-deploy)

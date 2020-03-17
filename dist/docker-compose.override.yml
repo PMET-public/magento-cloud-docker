@@ -1,0 +1,23 @@
+version: '2.1'
+services:
+  db:
+    environment:
+      - MYSQL_DATABASE=main
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=
+    networks: 
+      default:
+        aliases: 
+          - database.internal
+  build:
+    image: 'pmetpublic/magento-cloud-docker-php:7.3-cli-1.1'
+    environment:
+      - COMPOSER_HOME=/app/.composer
+    volumes:
+      - '.composer/cache:/app/.composer/cache:delegated'
+  deploy:
+    image: 'pmetpublic/magento-cloud-docker-php:7.3-cli-1.1'
+    volumes:
+      - 'magento:/app:rw'
+      - 'magento-vendor:/app/vendor:rw'
+      - 'magento-generated:/app/generated:rw'

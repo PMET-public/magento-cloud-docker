@@ -57,6 +57,10 @@
     "extra": {
         "map": [
             [
+                "dist/docker-compose.override.yml",
+                "docker-compose.override.yml"
+            ],
+            [
                 "dist/docker-sync.yml",
                 "docker-sync.yml"
             ],

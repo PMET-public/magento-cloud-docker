@@ -13,8 +13,6 @@ services:
     image: 'pmetpublic/magento-cloud-docker-php:7.3-cli-1.1'
     environment:
       - COMPOSER_HOME=/app/.composer
-    volumes:
-      - '.composer/cache:/app/.composer/cache:delegated'
   deploy:
     image: 'pmetpublic/magento-cloud-docker-php:7.3-cli-1.1'
     volumes:

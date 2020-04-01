@@ -1,17 +1,47 @@
 #!/bin/bash
 
-# assemble the parts needed for a magento cloud docker deployment
+set -e # stop on errors
+set -x # turn on debugging
+
+# this script assembles the parts needed for a magento cloud docker deployment and
+# if supported tools/icons are detected, bundles into a OSX style app
 # - the app
+# - any added media files (such as pub/media including styles.css from m2 sample data install)
+# - the script to manage the stack
 # - the composer cache
 # - the docker-compose conf
 # - the database
 # - the encryption key
 
-set -e
-set -x
+# set up some paths
+bsource_dir="$(dirname "$(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" $BASH_SOURCE)")"
+management_script="manage-dockerized-cloud-env.sh"
+app_icon="magento.icns"
+http_port=$(( ( RANDOM % 10000 )  + 10000 ))
+rand_subdomain_suffix=$(cat /dev/random | LC_ALL=C tr -dc 'a-z' | fold -w 4 | head -n 1)
+tld="the1umastory.com"
 
-rc_dir="$HOME/Adobe Systems Incorporated/SITeam - docker/env-library-rc"
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[1;33m'
+no_color='\033[0m'
 
+warning() {
+  printf "\n${yellow}${@}${no_color}\n\n"
+}
+
+# platypus is the OSX app bundler https://github.com/sveinbjornt/Platypus
+has_platypus() {
+  [[ "$(which platypus)" =~ "platypus" ]]
+  return $?
+}
+
+is_arg_git_repo() {
+  [[ "$1" =~ "http*\.git" ]] || [[ "$1" =~ "git*\.git" ]]
+  return $?
+}
+
+is_arg_git_repo $1 ||
 read -r pid env < <(echo $1 | perl -pe 's/():()/\1 \2/')
 
 # clone and then remove unwanted files from the git repo
@@ -27,6 +57,16 @@ env_dir=$tmp_env_dir-$ee_version
 rm -rf $env_dir  || :
 cp -a $tmp_env_dir $env_dir
 
+# include the managing script in app's bin dir and interpolate the url to open
+mkdir -p "$env_dir/bin"
+subdomain=$(echo "$pid-$env-$ee_version-$rand_subdomain_suffix" | perl "s/\./-/g")
+host="$subdomain.$tld"
+perl -pe "s/{{URL}}/http://$host:$http_port/g" "$bsource_dir/$management_script" > "$env_dir/bin/$management_script"
+
+# download the media dir minus the cache
+# this will invariably 
+magento-cloud mount:download -q -y -p $pid -e $env -m pub/media --target $env_dir/pub/media --exclude=cache
+
 # use the default cloud integration env database configuration, so ece-tools deploy will work the same for docker and cloud
 grep -q DATABASE_CONFIGURATION $env_dir/.magento.env.yaml || perl -i -pe "s/^  deploy:\s*$/  deploy:
     DATABASE_CONFIGURATION:
@@ -40,7 +80,7 @@ grep -q DATABASE_CONFIGURATION $env_dir/.magento.env.yaml || perl -i -pe "s/^  d
 
 # create a compressed tar file of the composer cache needed to install the app
 cd $tmp_env_dir
-env COMPOSER_HOME=.composer composer -n global require hirak/prestissimo
+env COMPOSER_HOME=.composer composer -n global require hirak/prestissimo # parallelize downloads (much faster)
 env COMPOSER_HOME=.composer composer install --no-suggest --no-ansi --no-interaction --no-progress --prefer-dist
 tar -zcf $env_dir/.composer.tar.gz .composer
 
@@ -51,7 +91,7 @@ composer config repositories.mcd vcs https://github.com/pmet-public/magento-clou
 env COMPOSER_HOME=.composer composer require magento/magento-cloud-docker:dev-develop
 
 # create the docker configuration
-./vendor/bin/ece-docker build:compose --host=$pid-$env.the1umastory.com --port=80
+./vendor/bin/ece-docker build:compose --host=$host --port=$http_port
 mv docker-compose*.yml .docker $env_dir
 
 # extract the DB into the expected dir
@@ -61,7 +101,40 @@ magento-cloud db:dump -p $pid -e $env -d $env_dir/.docker/mysql/docker-entrypoin
 magento-cloud ssh -p $pid -e $env "php -r '\$a = require_once(\"app/etc/env.php\"); echo \"<?php return array ( \\\"crypt\\\"  => \"; var_export(\$a[\"crypt\"]); echo \");\";'" > $env_dir/app/etc/env.php
 
 # clean-up
-rm -rf $tmp_env_dir 
+rm -rf $tmp_env_dir
 
 # remove auth.json from distributable dir
 rm $env_dir/auth.json
+
+# bundle with platypus
+has_platypus &&
+  [[ -f "$bsource_dir/$app_icon" ]] &&
+  {
+    # create app with symlinks
+    platypus --interface-type 'Text Window' \
+      --symlink \
+      --app-icon "$bsource_dir/$app_icon" \
+      --interpreter '/bin/bash' \
+      --interpreter-args '-l' \
+      --overwrite \
+      --text-background-color '#000000' \
+      --text-foreground-color '#FFFFFF' \
+      --name 'Dockerized Magento' \
+      -u 'Keith Bentrup' \
+      --bundle-identifier 'com.magento.dockerized-magento' \
+      --bundled-file "/dev/null" \
+      "$env_dir/bin/$management_script" \
+      "$env_dir.app"
+    # mv app into app bundle
+    mv "$env_dir" "$env_dir.app/Contents/Resources/app"
+    # update symlinks with relative paths
+    cd "$env_dir.app/Contents/Resources/"
+    ln -sf "./app/bin/$management_script" "script"
+    rm null # remove empty temp symlink used for bundled-file
+  } || {
+    echo "OSX app wrapper not generated. Missing platypus or icon files."
+    echo "Install platypus with:"
+    warning "brew cask install platypus"
+    echo "Then install the CLI with these instructions:"
+    warning "https://github.com/sveinbjornt/Platypus/blob/master/Documentation/Documentation.md#show-shell-command"
+  }

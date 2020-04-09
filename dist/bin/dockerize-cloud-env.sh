@@ -1,34 +1,27 @@
 #!/bin/bash
 
-set -e # stop on errors
-set -x # turn on debugging
+source "$(dirname $(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" "$BASH_SOURCE"))/lib.sh"
 
 # this script assembles the parts needed for a magento cloud docker deployment and
 # if supported tools/icons are detected, bundles into a OSX style app
-# - the app
-# - any added media files (such as pub/media including styles.css from m2 sample data install)
-# - the script to manage the stack
-# - the composer cache
-# - the docker-compose conf
-# - the database
-# - the encryption key
+# order of stpes matter because some operations depend on the results of others
+#
+# 1. the app from an existing env or git repo + branch
+# 2. any added media files (such as pub/media including styles.css from m2 sample data install)
+#   - req before compose cache bundling for catalog media dedup if from existing
+# 3. the script to manage the stack
+# 4. the composer cache
+# 5. the docker-compose conf
+#   - req after unique subdomain determined based on install source + version + random nonce
+# 6. the database
+# 7. the encryption key
+#
 
-# set up some paths
-bsource_dir="$(dirname "$(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" $BASH_SOURCE)")"
 management_script="manage-dockerized-cloud-env.sh"
 app_icon="magento.icns"
 http_port=$(( ( RANDOM % 10000 )  + 10000 ))
 rand_subdomain_suffix=$(cat /dev/random | LC_ALL=C tr -dc 'a-z' | fold -w 4 | head -n 1)
 tld="the1umastory.com"
-
-red='\033[0;31m'
-green='\033[0;32m'
-yellow='\033[1;33m'
-no_color='\033[0m'
-
-warning() {
-  printf "\n${yellow}${@}${no_color}\n\n"
-}
 
 # platypus is the OSX app bundler https://github.com/sveinbjornt/Platypus
 has_platypus() {
@@ -36,39 +29,111 @@ has_platypus() {
   return $?
 }
 
-is_arg_git_repo() {
-  [[ "$1" =~ "http*\.git" ]] || [[ "$1" =~ "git*\.git" ]]
+is_valid_git_url() {
+  [[ "$1" =~ http.*\.git ]] || [[ "$1" =~ git.*\.git ]]
   return $?
 }
 
-is_arg_git_repo $1 ||
-read -r pid env < <(echo $1 | perl -pe 's/():()/\1 \2/')
+is_existing_cloud_env() {
+  [[ "$is_existing_cloud_env" == "true" ]]
+  return $?
+}
+
+print_usage() {
+  echo "
+Usage:
+  $(basename $BASH_SOURCE) can either clone an existing cloud environment OR install a new Magento application from a Magento Cloud compatible git repository.
+
+Options:
+  -h                          Display this help
+  -p project id               Project to clone
+  -e environment id           Environment to clone
+  -g git url                  Git repository to install from
+  -b branch                   Git branch for install (HEAD commit of branch will be used)
+  -t tag                      Git tag for install (not compatible with '-b')
+  -a /path/to/auth.json       Optional path to auth.json file if required by composer
+"
+}
+
+# parse options
+while getopts "b:e:g:hp:t:a:" opt || [[ $# -eq 0 ]]; do
+  case "$opt" in
+    h ) print_usage; exit 0 ;;
+    p ) pid="$OPTARG" ;;
+    e ) env="$OPTARG" ;;
+    g ) git_url="$OPTARG" ;;
+    b ) branch="$OPTARG" ;;
+    t ) tag="$OPTARG" ;;
+    a ) auth_json="$OPTARG" ;;
+    \? )
+      print_usage
+      [[ -z "$OPTARG" ]] && error "Missing required option(s)."
+      error "Invalid option: -$OPTARG" ;;
+    : ) print_usage; error "Invalid option: -$OPTARG requires an argument" 1>&2 ;;
+  esac
+done
+
+# additional error checking
+{
+  { # pid and env are not empty but other related opts are
+    [[ ! -z "$pid" ]] && [[ ! -z "$env" ]] && [[ -z "$git_url" ]] && [[ -z "$branch" ]] && [[ -z "$tag" ]] && is_existing_cloud_env="true"
+  } ||
+  { # git url and branch are not empty but other related opts are
+    [[ ! -z "$git_url" ]] && [[ ! -z "$branch" ]] && [[ -z "$tag" ]] && [[ -z "$pid" ]] && [[ -z "$env" ]]
+  } ||
+  { # git url and tag are not empty but other related opts are
+    [[ ! -z "$git_url" ]] && [[ ! -z "$tag" ]] && [[ -z "$branch" ]] && [[ -z "$pid" ]] && [[ -z "$env" ]]
+  }
+} ||
+  error "You must provide either:
+  1) a project & environment id
+- OR -
+  2) a git url plus a specific branch or tag"
+
+is_existing_cloud_env &&
+  {
+    magento-cloud -q || error "The magento-cloud CLI was not found. To install, run
+    curl -sS https://accounts.magento.cloud/cli/installer | php"
+    app_name="$pid-$env"
+  } || {
+    is_valid_git_url "$git_url" ||
+      error "Please check your git url."
+    git_repo=$(echo "$git_url" | perl -pe 's/.*\/(.*)\.git/\1/')
+    app_name="$git_repo-$branch$tag"
+  }
 
 # clone and then remove unwanted files from the git repo
-tmp_env_dir=/tmp/$pid-$env
-rm -rf $tmp_env_dir || :
-magento-cloud get -e $env --depth=0 $pid $tmp_env_dir
-rm -rf $tmp_env_dir/.git
+tmp_app_dir="$HOME/Downloads/$app_name"
+rm -rf "$tmp_app_dir" || :
+is_existing_cloud_env &&
+  magento-cloud get -e "$env" --depth=0 "$pid" "$tmp_app_dir" ||
+  git clone "$git_url" --branch "$branch$tag" --depth 1 "$tmp_app_dir"
+rm -rf "$tmp_app_dir/.git"
 
 # create a clean copy (before composer install) of the repo to hold all assets with the EE version appended to the dir name
-# env_dir contents will be distributable unit
-ee_version=$(perl -ne 'undef $/; s/[\S\s]*(cloud-metapackage|magento\/product-enterprise-edition)"[\S\s]*?"version": "([^"]*)[\S\s]*/\2/m and print' "$tmp_env_dir/composer.lock")
-env_dir=$tmp_env_dir-$ee_version
-rm -rf $env_dir  || :
-cp -a $tmp_env_dir $env_dir
-
-# include the managing script in app's bin dir and interpolate the url to open
-mkdir -p "$env_dir/bin"
-subdomain=$(echo "$pid-$env-$ee_version-$rand_subdomain_suffix" | perl "s/\./-/g")
+# app_dir contents will be distributable unit
+ee_version=$(perl -ne 'undef $/; s/[\S\s]*(cloud-metapackage|magento\/product-enterprise-edition)"[\S\s]*?"version": "([^"]*)[\S\s]*/\2/m and print' "$tmp_app_dir/composer.lock")
+app_dir=$tmp_app_dir-$ee_version
+rm -rf "$app_dir"  || :
+cp -a "$tmp_app_dir" "$app_dir"
+subdomain=$(echo "$app_name-$ee_version-$rand_subdomain_suffix" | perl -pe 's/\./-/g')
 host="$subdomain.$tld"
-perl -pe "s/{{URL}}/http://$host:$http_port/g" "$bsource_dir/$management_script" > "$env_dir/bin/$management_script"
 
-# download the media dir minus the cache
-# this will invariably 
-magento-cloud mount:download -q -y -p $pid -e $env -m pub/media --target $env_dir/pub/media --exclude=cache
+# include the managing script in app's bin dir
+mkdir -p "$app_dir/bin"
+cp "$(get_lib_dir)/$management_script" "$app_dir/bin/$management_script"
+
+# if cloning existing env, download the media dir minus the cache
+# this will cause significant redundancy of images until can be deduped
+is_existing_cloud_env &&
+  {
+    mkdir -p "$tmp_app_dir/pub/media"
+    magento-cloud mount:download -y -p "$pid" -e "$env" -m pub/media --target "$tmp_app_dir/pub/media" --exclude=cache
+    tar -C "$tmp_app_dir" -zcf "$app_dir/media.tar.gz" "pub/media"
+  }
 
 # use the default cloud integration env database configuration, so ece-tools deploy will work the same for docker and cloud
-grep -q DATABASE_CONFIGURATION $env_dir/.magento.env.yaml || perl -i -pe "s/^  deploy:\s*$/  deploy:
+grep -q DATABASE_CONFIGURATION "$app_dir/.magento.env.yaml" || perl -i -pe "s/^  deploy:\s*$/  deploy:
     DATABASE_CONFIGURATION:
       connection:
         default:
@@ -76,59 +141,75 @@ grep -q DATABASE_CONFIGURATION $env_dir/.magento.env.yaml || perl -i -pe "s/^  d
           host: database.internal
           dbname: main
           password: ''
-/" $env_dir/.magento.env.yaml
+/" "$app_dir/.magento.env.yaml"
 
 # create a compressed tar file of the composer cache needed to install the app
-cd $tmp_env_dir
+[[ ! -z "$auth_json" ]] &&
+  cp "$auth_json" "$tmp_app_dir"
+cd "$tmp_app_dir"
+[[ ! -f "auth.json" ]] && 
+  warning "No auth.json file detected! Composer may not be able to download required packages." && sleep 5
 env COMPOSER_HOME=.composer composer -n global require hirak/prestissimo # parallelize downloads (much faster)
-env COMPOSER_HOME=.composer composer install --no-suggest --no-ansi --no-interaction --no-progress --prefer-dist
-tar -zcf $env_dir/.composer.tar.gz .composer
-
 # require (or replace if already required) the official magento cloud docker module with ours
 # also note that a few envs may have a composer repo entry that needs to be updated
 perl -i -pe 's/magento\/magento-cloud-docker.git/pmet-public\/magento-cloud-docker.git/' composer.json
-composer config repositories.mcd vcs https://github.com/pmet-public/magento-cloud-docker
-env COMPOSER_HOME=.composer composer require magento/magento-cloud-docker:dev-develop
+env COMPOSER_HOME=.composer composer config repositories.mcd vcs https://github.com/pmet-public/magento-cloud-docker
+# special case: we want to create a local composer cache, not actually install the app
+# so let's prevent the scripts in composer.json from running
+cp composer.json composer.json.bak
+cat composer.json.bak | python -c "import sys, json; data = json.load(sys.stdin); del data['scripts']; print(json.dumps(data))" > composer.json
+env COMPOSER_HOME=.composer composer require magento/magento-cloud-docker:dev-develop --no-suggest --no-ansi --no-interaction --no-progress
+env COMPOSER_HOME=.composer composer install --no-suggest --no-ansi --no-interaction --no-progress --prefer-dist
+# now we can restore the original composer.json
+mv composer.json.bak composer.json
+# special case: assume existing installs already have catalog imagery from modules in pub/media
+# this can significantly reduce composer archive size
+is_existing_cloud_env && find .composer -path "*/catalog/product/*.jpg" -delete || :
+tar -zcf "$app_dir/.composer.tar.gz" .composer
 
 # create the docker configuration
-./vendor/bin/ece-docker build:compose --host=$host --port=$http_port
-mv docker-compose*.yml .docker $env_dir
+./vendor/bin/ece-docker build:compose --host="$host" --port="$http_port"
+mv docker-compose*.yml .docker "$app_dir"
 
-# extract the DB into the expected dir
-magento-cloud db:dump -p $pid -e $env -d $env_dir/.docker/mysql/docker-entrypoint-initdb.d/
+# if cloning existing env, extract the DB into the expected dir
+is_existing_cloud_env &&
+  magento-cloud db:dump -p "$pid" -e "$env" -d "$app_dir/.docker/mysql/docker-entrypoint-initdb.d/"
 
-# grab only the encryption key from the env's app/etc/env.php
-magento-cloud ssh -p $pid -e $env "php -r '\$a = require_once(\"app/etc/env.php\"); echo \"<?php return array ( \\\"crypt\\\"  => \"; var_export(\$a[\"crypt\"]); echo \");\";'" > $env_dir/app/etc/env.php
+# if cloning existing env, grab only the encryption key from the env's app/etc/env.php
+is_existing_cloud_env &&
+  magento-cloud ssh -p "$pid" -e "$env" "php -r '\$a = require_once(\"app/etc/env.php\"); echo \"<?php return array ( \\\"crypt\\\"  => \"; var_export(\$a[\"crypt\"]); echo \");\";'" > "$app_dir/app/etc/env.php"
 
-# clean-up
-rm -rf $tmp_env_dir
+# del tmp dir
+rm -rf "$tmp_app_dir"
 
 # remove auth.json from distributable dir
-rm $env_dir/auth.json
+rm "$app_dir/auth.json" || :
 
 # bundle with platypus
 has_platypus &&
-  [[ -f "$bsource_dir/$app_icon" ]] &&
+  [[ -f "$(get_lib_dir)/$app_icon" ]] &&
   {
     # create app with symlinks
-    platypus --interface-type 'Text Window' \
+    platypus --interface-type 'Status Menu' \
+      --status-item-kind 'Icon' \
+      --status-item-icon "$(get_lib_dir)/$app_icon" \
       --symlink \
-      --app-icon "$bsource_dir/$app_icon" \
+      --app-icon "$(get_lib_dir)/$app_icon" \
       --interpreter '/bin/bash' \
       --interpreter-args '-l' \
       --overwrite \
       --text-background-color '#000000' \
       --text-foreground-color '#FFFFFF' \
-      --name 'Dockerized Magento' \
+      --name "$subdomain" \
       -u 'Keith Bentrup' \
       --bundle-identifier 'com.magento.dockerized-magento' \
       --bundled-file "/dev/null" \
-      "$env_dir/bin/$management_script" \
-      "$env_dir.app"
+      "$app_dir/bin/$management_script" \
+      "$app_dir.app"
     # mv app into app bundle
-    mv "$env_dir" "$env_dir.app/Contents/Resources/app"
+    mv "$app_dir" "$app_dir.app/Contents/Resources/app"
     # update symlinks with relative paths
-    cd "$env_dir.app/Contents/Resources/"
+    cd "$app_dir.app/Contents/Resources/"
     ln -sf "./app/bin/$management_script" "script"
     rm null # remove empty temp symlink used for bundled-file
   } || {

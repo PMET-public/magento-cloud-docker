@@ -1,27 +1,162 @@
 #!/bin/bash
 
-set -e
-set -x
+source "$(dirname $(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" "$BASH_SOURCE"))/lib.sh"
 
-# https://stackoverflow.com/questions/59895/how-to-get-the-source-directory-of-a-bash-script-from-within-the-script-itself
-# https://stackoverflow.com/questions/4175264/how-to-retrieve-absolute-path-given-relative
-bsource_dir="$(dirname "$(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" "$BASH_SOURCE")")"
-cd "$bsource_dir/.."
+# the Platypus status menu app will initially run this script with no arguments
+# and display each line of STDOUT as an option
+# when an option is selected, the option text is passed as an argument to a second run on this script
 
-# create containers but do not start
-docker-compose up --no-start
-prefix=$(docker-compose ps | sed -n 's/_build_1 .*$//p')
-# copy db files to db container
-docker cp .docker/mysql/docker-entrypoint-initdb.d ${prefix}_db_1:/
-# copy over app files to build container
-tar -cf - --exclude .docker --exclude .composer.tar.gz . | docker cp - ${prefix}_build_1:/app
-tar -zxf .composer.tar.gz | docker cp - ${prefix}_build_1:/app
-docker cp app/etc ${prefix}_deploy_1:/app/app/
-docker cp pub
-docker-compose up -d db build
-docker-compose run build cloud-build
-docker-compose up -d
-docker-compose run deploy cloud-deploy
-docker-compose run deploy cloud-post-deploy
+# cd to app dir containing relevant docker-compose files
+cd $(get_lib_dir)/..
+export COMPOSE_PROJECT_NAME=$(get_project_name)
 
-open {{URL}}
+has_no_args() {
+  [[ ${#BASH_ARGV[@]} -eq 0 ]]
+  return $?
+}
+
+echo_in_terminal() {
+  osascript -e "tell app \"Terminal\"
+    if not (exists window 1) then reopen
+    activate
+    do script \"echo $1\" in window 1
+  end tell" 2>&1 >> /tmp/out
+}
+
+is_app_installed() {
+  [[ ! -z "$app_is_installed" ]] ||
+    {
+      $(docker ps -a | grep -q " ${COMPOSE_PROJECT_NAME}_build_1_")
+      app_is_installed=$?
+    }
+  return "$app_is_installed"
+}
+
+
+# menu item functions
+
+install_app() {
+  is_app_installed && return
+  local menu_item_text="Install & open app in browser"
+  has_no_args &&
+    echo "$menu_item_text" && return
+  [[ "$menu_item_text" != "$BASH_ARGV" ]] && return
+
+  # create containers but do not start
+  docker-compose up --no-start
+  # copy db files to db container
+  docker cp .docker/mysql/docker-entrypoint-initdb.d ${COMPOSE_PROJECT_NAME}_db_1:/
+  # copy over app files to build container
+  tar -cf - --exclude .docker --exclude .composer.tar.gz . | docker cp - ${COMPOSE_PROJECT_NAME}_build_1:/app
+  tar -zxf .composer.tar.gz | docker cp - ${COMPOSE_PROJECT_NAME}_build_1:/app
+  docker cp app/etc ${COMPOSE_PROJECT_NAME}_deploy_1:/app/app/
+  tar -zxf media.tar.gz | docker cp - ${COMPOSE_PROJECT_NAME}_build_1:/app || :
+  docker-compose up -d db build
+  docker-compose run build cloud-build
+  docker-compose up -d
+  docker-compose run deploy cloud-deploy
+  docker-compose run deploy magento-command config:set system/full_page_cache/caching_application 2 --lock-env
+  docker-compose run deploy cloud-post-deploy
+  open "http://$(get_host)"
+  exit
+}
+
+open_app() {
+  ! is_app_installed && return
+  local menu_item_text="Open app in browser"
+  has_no_args &&
+    echo "$menu_item_text" && return
+  [[ "$menu_item_text" != "$BASH_ARGV" ]] && return
+
+  open "http://$(get_host)"
+  exit
+}
+
+stop_app() {
+  ! is_app_installed && return
+  local menu_item_text="Stop app"
+  has_no_args && echo "$menu_item_text" && return
+  [[ "$menu_item_text" != "$BASH_ARGV" ]] && return
+  echo_in_terminal "$BASH_ARGV"
+  exit
+}
+
+resume_app() {
+  local menu_item_text="Resume app"
+  has_no_args &&
+    echo "$menu_item_text" && return
+  [[ "$menu_item_text" != "$BASH_ARGV" ]] && return
+  echo_in_terminal "$BASH_ARGV"
+  exit
+}
+
+reset_app() {
+  local menu_item_text="Reset app to original state"
+  has_no_args &&
+    echo "$menu_item_text" && return
+  [[ "$menu_item_text" != "$BASH_ARGV" ]] && return
+  echo_in_terminal "$BASH_ARGV"
+  exit
+}
+
+clone_app() {
+  local menu_item_text="Clone to new app"
+  has_no_args &&
+    echo "$menu_item_text" && return
+  [[ "$menu_item_text" != "$BASH_ARGV" ]] && return
+  echo_in_terminal "$BASH_ARGV"
+  exit
+}
+
+show_app_logs() {
+  local menu_item_text="Show app logs"
+  has_no_args &&
+    echo "$menu_item_text" && return
+  [[ "$menu_item_text" != "$BASH_ARGV" ]] && return
+  echo_in_terminal "$BASH_ARGV"
+  exit
+}
+
+delete_app() {
+  local menu_item_text="Uninstall this app"
+  has_no_args &&
+    echo "$menu_item_text" && return
+  [[ "$menu_item_text" != "$BASH_ARGV" ]] && return
+  echo_in_terminal "$BASH_ARGV"
+  exit
+}
+
+delete_other_apps() {
+  local menu_item_text="Uninstall all other Magento apps"
+  has_no_args &&
+    echo "$menu_item_text" && return
+  [[ "$menu_item_text" != "$BASH_ARGV" ]] && return
+  echo_in_terminal "$BASH_ARGV"
+  exit
+}
+
+stop_other_apps() {
+  local menu_item_text="Stop all other Magento apps"
+  has_no_args &&
+    echo "$menu_item_text" && return
+  [[ "$menu_item_text" != "$BASH_ARGV" ]] && return
+  echo_in_terminal "$BASH_ARGV"
+  exit
+}
+
+menu_items=(
+  install_app
+  open_app
+  stop_app
+  resume_app
+  reset_app
+  clone_app
+  show_app_logs
+  delete_app
+  delete_other_apps
+  stop_other_apps
+)
+
+for menu_item in "${menu_items[@]}"; do
+  $menu_item
+done

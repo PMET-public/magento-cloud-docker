@@ -26,12 +26,20 @@ echo_in_terminal() {
 is_app_installed() {
   [[ ! -z "$app_is_installed" ]] ||
     {
-      $(docker ps -a | grep -q " ${COMPOSE_PROJECT_NAME}_build_1_")
+      docker ps -a | grep -q " ${COMPOSE_PROJECT_NAME}_build_1"
       app_is_installed=$?
     }
   return "$app_is_installed"
 }
 
+is_app_running() {
+  [[ ! -z "$app_is_installed" ]] ||
+    {
+      docker ps -a | grep -q " ${COMPOSE_PROJECT_NAME}_build_1"
+      app_is_installed=$?
+    }
+  return "$app_is_installed"
+}
 
 # menu item functions
 
@@ -62,7 +70,7 @@ install_app() {
 }
 
 open_app() {
-  ! is_app_installed && return
+  ! is_app_installed && return # menu item n/a if not installed
   local menu_item_text="Open app in browser"
   has_no_args &&
     echo "$menu_item_text" && return
@@ -73,7 +81,8 @@ open_app() {
 }
 
 stop_app() {
-  ! is_app_installed && return
+  ! is_app_installed && return # menu item n/a if not installed
+  ! is_app_running && return # menu item n/a if not running
   local menu_item_text="Stop app"
   has_no_args && echo "$menu_item_text" && return
   [[ "$menu_item_text" != "$BASH_ARGV" ]] && return
@@ -82,6 +91,8 @@ stop_app() {
 }
 
 resume_app() {
+  ! is_app_installed && return # menu item n/a if not installed
+  is_app_running && return # menu item n/a if running
   local menu_item_text="Resume app"
   has_no_args &&
     echo "$menu_item_text" && return
@@ -91,7 +102,17 @@ resume_app() {
 }
 
 reset_app() {
+  ! is_app_installed && return # menu item n/a if not installed
   local menu_item_text="Reset app to original state"
+  has_no_args &&
+    echo "$menu_item_text" && return
+  [[ "$menu_item_text" != "$BASH_ARGV" ]] && return
+  echo_in_terminal "$BASH_ARGV"
+  exit
+}
+
+sync_app_to_remote() {
+  local menu_item_text="Sync app to remote env"
   has_no_args &&
     echo "$menu_item_text" && return
   [[ "$menu_item_text" != "$BASH_ARGV" ]] && return
@@ -108,7 +129,18 @@ clone_app() {
   exit
 }
 
+start_shell() {
+  ! is_app_installed && return # menu item n/a if not installed
+  local menu_item_text="Start shell in app"
+  has_no_args &&
+    echo "$menu_item_text" && return
+  [[ "$menu_item_text" != "$BASH_ARGV" ]] && return
+  echo_in_terminal "$BASH_ARGV"
+  exit
+}
+
 show_app_logs() {
+  ! is_app_installed && return # menu item n/a if not installed
   local menu_item_text="Show app logs"
   has_no_args &&
     echo "$menu_item_text" && return
@@ -117,7 +149,8 @@ show_app_logs() {
   exit
 }
 
-delete_app() {
+uninstall_app() {
+  ! is_app_installed && return # menu item n/a if not installed
   local menu_item_text="Uninstall this app"
   has_no_args &&
     echo "$menu_item_text" && return
@@ -126,7 +159,7 @@ delete_app() {
   exit
 }
 
-delete_other_apps() {
+uninstall_other_apps() {
   local menu_item_text="Uninstall all other Magento apps"
   has_no_args &&
     echo "$menu_item_text" && return
@@ -150,10 +183,12 @@ menu_items=(
   stop_app
   resume_app
   reset_app
+  sync_app_to_remote
   clone_app
+  start_shell
   show_app_logs
-  delete_app
-  delete_other_apps
+  uninstall_app
+  uninstall_other_apps
   stop_other_apps
 )
 

@@ -18,7 +18,7 @@ source "$(dirname $(python -c "import os; import sys; print(os.path.realpath(sys
 #
 
 management_script="manage-dockerized-cloud-env.sh"
-app_icon="magento.icns"
+app_icon_path="$(lib_d)/magento.icns"
 http_port=$(( ( RANDOM % 10000 )  + 10000 ))
 rand_subdomain_suffix=$(cat /dev/random | LC_ALL=C tr -dc 'a-z' | fold -w 4 | head -n 1)
 tld="the1umastory.com"
@@ -35,7 +35,7 @@ is_valid_git_url() {
 }
 
 is_existing_cloud_env() {
-  [[ "$is_existing_cloud_env" == "true" ]]
+  [[ "$env_is_existing_cloud" == "true" ]]
   return $?
 }
 
@@ -45,18 +45,19 @@ Usage:
   $(basename $BASH_SOURCE) can either clone an existing cloud environment OR install a new Magento application from a Magento Cloud compatible git repository.
 
 Options:
-  -h                          Display this help
-  -p project id               Project to clone
-  -e environment id           Environment to clone
-  -g git url                  Git repository to install from
-  -b branch                   Git branch for install (HEAD commit of branch will be used)
-  -t tag                      Git tag for install (not compatible with '-b')
-  -a /path/to/auth.json       Optional path to auth.json file if required by composer
+  -h                        Display this help
+  -p project id             Project to clone
+  -e environment id         Environment to clone
+  -g git url                Git repository to install from
+  -b branch                 Git branch for install (HEAD commit of branch will be used)
+  -t tag                    Git tag for install (not compatible with '-b')
+  -a /path/to/auth.json     Optional path to auth.json file if required by composer
+  -i /path/to/file.icns     Optional path to icon for Platyplus OSX app bundle (Apple .icns file preferred)
 "
 }
 
 # parse options
-while getopts "b:e:g:hp:t:a:" opt || [[ $# -eq 0 ]]; do
+while getopts "b:e:g:hp:t:a:i:" opt || [[ $# -eq 0 ]]; do
   case "$opt" in
     h ) print_usage; exit 0 ;;
     p ) pid="$OPTARG" ;;
@@ -64,7 +65,8 @@ while getopts "b:e:g:hp:t:a:" opt || [[ $# -eq 0 ]]; do
     g ) git_url="$OPTARG" ;;
     b ) branch="$OPTARG" ;;
     t ) tag="$OPTARG" ;;
-    a ) auth_json="$OPTARG" ;;
+    a ) auth_json_path="$OPTARG" ;;
+    i ) app_icon="$OPTARG" ;;
     \? )
       print_usage
       [[ -z "$OPTARG" ]] && error "Missing required option(s)."
@@ -76,7 +78,8 @@ done
 # additional error checking
 {
   { # pid and env are not empty but other related opts are
-    [[ ! -z "$pid" ]] && [[ ! -z "$env" ]] && [[ -z "$git_url" ]] && [[ -z "$branch" ]] && [[ -z "$tag" ]] && is_existing_cloud_env="true"
+    [[ ! -z "$pid" ]] && [[ ! -z "$env" ]] && [[ -z "$git_url" ]] && [[ -z "$branch" ]] && [[ -z "$tag" ]] && \
+      env_is_existing_cloud="true"
   } ||
   { # git url and branch are not empty but other related opts are
     [[ ! -z "$git_url" ]] && [[ ! -z "$branch" ]] && [[ -z "$tag" ]] && [[ -z "$pid" ]] && [[ -z "$env" ]]
@@ -85,10 +88,15 @@ done
     [[ ! -z "$git_url" ]] && [[ ! -z "$tag" ]] && [[ -z "$branch" ]] && [[ -z "$pid" ]] && [[ -z "$env" ]]
   }
 } ||
-  error "You must provide either:
+  error "
+You must provide either:
   1) a project & environment id
 - OR -
-  2) a git url plus a specific branch or tag"
+  2) a git url plus a specific branch or tag
+"
+[[ ! -z "$auth_json_path" && ! -f "$auth_json_path" ]] && error "Composer auth file not file: $auth_json_path"
+[[ ! -f "$app_icon_path" ]] && error "App icon not file: $app_icon_path"
+
 
 is_existing_cloud_env &&
   {
@@ -110,9 +118,14 @@ is_existing_cloud_env &&
   git clone "$git_url" --branch "$branch$tag" --depth 1 "$tmp_app_dir"
 rm -rf "$tmp_app_dir/.git"
 
-# create a clean copy (before composer install) of the repo to hold all assets with the EE version appended to the dir name
+# create a clean copy (before composer install) of repo to hold assets with the EE version appended to the dir name
 # app_dir contents will be distributable unit
-ee_version=$(perl -ne 'undef $/; s/[\S\s]*(cloud-metapackage|magento\/product-enterprise-edition)"[\S\s]*?"version": "([^"]*)[\S\s]*/\2/m and print' "$tmp_app_dir/composer.lock")
+ee_version=$(
+  perl -ne '
+    undef $/;
+    s/[\S\s]*(cloud-metapackage|magento\/product-enterprise-edition)"[\S\s]*?"version": "([^"]*)[\S\s]*/\2/m and print
+  ' "$tmp_app_dir/composer.lock"
+)
 app_dir=$tmp_app_dir-$ee_version
 rm -rf "$app_dir"  || :
 cp -a "$tmp_app_dir" "$app_dir"
@@ -121,7 +134,7 @@ host="$subdomain.$tld"
 
 # include the managing script in app's bin dir
 mkdir -p "$app_dir/bin"
-cp "$(get_lib_dir)/$management_script" "$app_dir/bin/$management_script"
+cp "$lib_dir/$management_script" "$app_dir/bin/$management_script"
 
 # if cloning existing env, download the media dir minus the cache
 # this will cause significant redundancy of images until can be deduped
@@ -132,7 +145,7 @@ is_existing_cloud_env &&
     tar -C "$tmp_app_dir" -zcf "$app_dir/media.tar.gz" "pub/media"
   }
 
-# use the default cloud integration env database configuration, so ece-tools deploy will work the same for docker and cloud
+# use default cloud integration env database configuration, so ece-tools deploy will work the same for docker and cloud
 grep -q DATABASE_CONFIGURATION "$app_dir/.magento.env.yaml" || perl -i -pe "s/^  deploy:\s*$/  deploy:
     DATABASE_CONFIGURATION:
       connection:
@@ -143,33 +156,48 @@ grep -q DATABASE_CONFIGURATION "$app_dir/.magento.env.yaml" || perl -i -pe "s/^ 
           password: ''
 /" "$app_dir/.magento.env.yaml"
 
-# create a compressed tar file of the composer cache needed to install the app
-[[ ! -z "$auth_json" ]] &&
-  cp "$auth_json" "$tmp_app_dir"
+# goals of following composer operations:
+# 1. create a compressed tar file of the composer cache needed to install the app so
+#   a. smaller, more manageable distributable
+#   b. fast install during build
+#   c. no credentials needed in build container
+# 2. use prestissimo to speed up the creation of the cache
+# 3. do not run the composer.json install scripts (also to speed up the composer cache creation)
+# 4. use modified version of magento-cloud-docker to create modified docker-compose files
+# 5. restore original composer.json and composer.lock to ensure originals are used for deployment in containers
 cd "$tmp_app_dir"
+[[ ! -z "$auth_json_path" ]] && # if auth.json provided, use it
+  cp "$auth_json_path" "$tmp_app_dir"
 [[ ! -f "auth.json" ]] && 
-  warning "No auth.json file detected! Composer may not be able to download required packages." && sleep 5
-env COMPOSER_HOME=.composer composer -n global require hirak/prestissimo # parallelize downloads (much faster)
+  warning "No auth.json file detected! Composer may be rate-limited and/or unable to download required packages." && sleep 5
+# backup for later restore
+cp composer.json composer.json.bak
+cp composer.lock composer.lock.bak
+env COMPOSER_HOME=.composer composer global require hirak/prestissimo --no-interaction # parallelize downloads (much faster)
+# install with original composer.lock (but with composer.json scripts skipped) so exact versions needed for build in cache
+cat composer.json.bak | \
+  python -c "import sys, json; data = json.load(sys.stdin); del data['scripts']; print(json.dumps(data))" > composer.json
+env COMPOSER_HOME=.composer composer install --no-suggest --no-ansi --no-interaction --no-progress --prefer-dist
 # require (or replace if already required) the official magento cloud docker module with ours
 # also note that a few envs may have a composer repo entry that needs to be updated
 perl -i -pe 's/magento\/magento-cloud-docker.git/pmet-public\/magento-cloud-docker.git/' composer.json
-env COMPOSER_HOME=.composer composer config repositories.mcd vcs https://github.com/pmet-public/magento-cloud-docker
-# special case: we want to create a local composer cache, not actually install the app
-# so let's prevent the scripts in composer.json from running
-cp composer.json composer.json.bak
-cat composer.json.bak | python -c "import sys, json; data = json.load(sys.stdin); del data['scripts']; print(json.dumps(data))" > composer.json
+grep -q 'pmet-public/magento-cloud-docker' composer.json ||
+  env COMPOSER_HOME=.composer composer config repositories.mcd git git@github.com:pmet-public/magento-cloud-docker.git
 env COMPOSER_HOME=.composer composer require magento/magento-cloud-docker:dev-develop --no-suggest --no-ansi --no-interaction --no-progress
-env COMPOSER_HOME=.composer composer install --no-suggest --no-ansi --no-interaction --no-progress --prefer-dist
-# now we can restore the original composer.json
+# create the docker configuration with the modified magento cloud docker
+./vendor/bin/ece-docker build:compose --host="$host" --port="$http_port"
+mv docker-compose*.yml .docker "$app_dir"
+# restore the original composer files for use in the build container later
 mv composer.json.bak composer.json
-# special case: assume existing installs already have catalog imagery from modules in pub/media
+mv composer.lock.bak composer.lock
+# remove auth.json from distributable dir if it exists
+rm "$app_dir/auth.json" || :
+# special case: assuming some existing installed packages already have catalog imagery from modules in pub/media, we can delete that media
 # this can significantly reduce composer archive size
 is_existing_cloud_env && find .composer -path "*/catalog/product/*.jpg" -delete || :
 tar -zcf "$app_dir/.composer.tar.gz" .composer
-
-# create the docker configuration
-./vendor/bin/ece-docker build:compose --host="$host" --port="$http_port"
-mv docker-compose*.yml .docker "$app_dir"
+# del tmp dir
+cd "$app_dir" && rm -rf "$tmp_app_dir"
 
 # if cloning existing env, extract the DB into the expected dir
 is_existing_cloud_env &&
@@ -177,24 +205,22 @@ is_existing_cloud_env &&
 
 # if cloning existing env, grab only the encryption key from the env's app/etc/env.php
 is_existing_cloud_env &&
-  magento-cloud ssh -p "$pid" -e "$env" "php -r '\$a = require_once(\"app/etc/env.php\"); echo \"<?php return array ( \\\"crypt\\\"  => \"; var_export(\$a[\"crypt\"]); echo \");\";'" > "$app_dir/app/etc/env.php"
-
-# del tmp dir
-rm -rf "$tmp_app_dir"
-
-# remove auth.json from distributable dir
-rm "$app_dir/auth.json" || :
+  magento-cloud ssh -p "$pid" -e "$env" "
+    php -r '\$a = require_once(\"app/etc/env.php\");
+    echo \"<?php return array ( \\\"crypt\\\"  => \";
+    var_export(\$a[\"crypt\"]); echo \");\";'
+  " > "$app_dir/app/etc/env.php"
 
 # bundle with platypus
 has_platypus &&
-  [[ -f "$(get_lib_dir)/$app_icon" ]] &&
   {
     # create app with symlinks
-    platypus --interface-type 'Status Menu' \
+    platypus \
+      --app-icon "$app_icon_path" \
       --status-item-kind 'Icon' \
-      --status-item-icon "$(get_lib_dir)/$app_icon" \
+      --status-item-icon "$app_icon_path" \
+      --interface-type 'Status Menu' \
       --symlink \
-      --app-icon "$(get_lib_dir)/$app_icon" \
       --interpreter '/bin/bash' \
       --interpreter-args '-l' \
       --overwrite \
@@ -212,8 +238,9 @@ has_platypus &&
     cd "$app_dir.app/Contents/Resources/"
     ln -sf "./app/bin/$management_script" "script"
     rm null # remove empty temp symlink used for bundled-file
+    msg "Successfully created $app_dir.app"
   } || {
-    echo "OSX app wrapper not generated. Missing platypus or icon files."
+    warning "Platypus not found. OSX app bundle not generated."
     echo "Install platypus with:"
     warning "brew cask install platypus"
     echo "Then install the CLI with these instructions:"

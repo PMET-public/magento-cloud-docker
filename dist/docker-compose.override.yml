@@ -1,6 +1,8 @@
 version: '2.1'
 services:
   db:
+    labels: 
+      - com.magento.dockerized
     environment:
       - MYSQL_DATABASE=main
       - MYSQL_USER=user
@@ -19,3 +21,5 @@ services:
       - 'magento:/app:rw'
       - 'magento-vendor:/app/vendor:rw'
       - 'magento-generated:/app/generated:rw'
+  # tls:
+  #   image: nginx

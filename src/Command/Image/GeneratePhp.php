@@ -57,6 +57,7 @@ class GeneratePhp extends Command
         'netcat',
         'less',
         'strace',
+        'rsync',
     ];
 
     private const PHP_EXTENSIONS_ENABLED_BY_DEFAULT = [

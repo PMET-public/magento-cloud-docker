@@ -1,6 +1,6 @@
 # example usage with digitial ocean plugin:
-# docker run -it -v "/path/to/digitalocean.ini:/credentials.ini" -v "/dest/path/archive:/etc/letsencrypt/archive" pmetpublic/certbot-dns \
-#   --dns-digitalocean --dns-digitalocean-credentials /credentials.ini --dns-digitalocean-propagation-seconds 30 -d "*.yourdomain.com"
+# docker run -it -v "/path/to/.dns-config.ini:/.dns-config.ini" -v "/dest/path/archive:/etc/letsencrypt/archive" pmetpublic/certbot-dns \
+#   --dns-digitalocean --dns-digitalocean-credentials /.dns-config.ini --dns-digitalocean-propagation-seconds 30 -d "*.yourdomain.com"
 
 FROM debian:stable-slim
 

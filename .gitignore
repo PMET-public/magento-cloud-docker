@@ -5,3 +5,5 @@
 /composer.lock
 /auth.json
 /_workdir
+.quit_detection_file
+.dns-config.ini

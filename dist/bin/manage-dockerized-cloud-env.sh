@@ -1,20 +1,19 @@
 #!/bin/bash
 
-source "$(dirname $(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" "$BASH_SOURCE"))/lib.sh"
+source "$(dirname "$(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" "$BASH_SOURCE")")/lib.sh"
 
 # the Platypus status menu app will initially run this script with no arguments
 # and display each line of STDOUT as an option
+# so it's critical to complete ASAP to reduce perceived latency
 # when an option is selected, the option text is passed as an argument to a second run on this script
 
-# cd to app dir containing relevant docker-compose files
-cd "$lib_dir/.."
-[[ -f docker-compose.yml ]] && export_compose_project_name
-
 do_in_terminal() {
-  osascript -e "tell app \"Terminal\"
+  script_path="$(echo "$1" | perl -pe 's/ /\\\\ /g')"
+  echo "$script_path" >> /tmp/out
+  osascript -e "tell application \"Terminal\"
     if not (exists window 1) then reopen
     activate
-    do script \"$1\" in window 1
+    do script \"$script_path\" in window 1
   end tell" 2>&1 >> /tmp/out
 }
 
@@ -34,7 +33,7 @@ is_app_installed() {
   [[ -z "$COMPOSE_PROJECT_NAME" ]] && return 1
   [[ ! -z "$app_is_installed" ]] ||
     {
-      docker ps -a | grep -q " ${COMPOSE_PROJECT_NAME}_build_1"
+      echo "$formatted_cached_docker_ps_output" | grep -q "^${COMPOSE_PROJECT_NAME}_db_1 "
       app_is_installed=$?
     }
   return "$app_is_installed"
@@ -44,27 +43,39 @@ is_app_running() {
   [[ -z "$COMPOSE_PROJECT_NAME" ]] && return 1
   [[ ! -z "$app_is_running" ]] ||
     {
-      running_db_id=$(docker ps -q -f "name=^${COMPOSE_PROJECT_NAME}_db_1")
-      [[ ! -z "$running_db_id" ]]
+      echo "$formatted_cached_docker_ps_output" | grep -q "^${COMPOSE_PROJECT_NAME}_db_1 Up"
       app_is_running=$?
-      #docker ps | grep -q " ${COMPOSE_PROJECT_NAME}_db_1"
-      #app_is_running=$?
     }
   return "$app_is_running"
 }
 
 are_other_apps_running() {
-  local lines=$(docker ps -f "label=com.magento.dockerized" | \
-    grep -v "^${COMPOSE_PROJECT_NAME}_" | \
-    wc -l)
-  [[ $lines -gt 1 ]] && return
+  echo "$formatted_cached_docker_ps_output" | grep -q -v "^${COMPOSE_PROJECT_NAME}_db_1 "
+  return $?
 }
 
-display_if_no_args_or_continue_if_match() {
+display_only_and_skip_func() {
+  # returning true will cause function body to be skipped
+  # returning false will cause the remainder of the function to run
+  [[ "$bypass_menu_check" == "true" ]] && {
+    bypass_menu_check="false"
+    return 1
+  }
   local mi_text=${1}__text
   local mi_icon=${1}__icon
   started_without_args && echo "${!mi_icon}${!mi_text}" && return
   [[ "${!mi_text}" != "$BASH_ARGV" ]] && return
+}
+
+detect_quit_and_stop_app() {
+  # if quit_detection_file exists, already monitoring for quit and can return
+  [[ -f "$quit_detection_file" ]] && return
+  touch "$quit_detection_file"
+  while ps -p $PPID > /dev/null 2>&1; do
+    sleep 10
+  done
+  rm "$quit_detection_file"
+  bypass_menu_check="true" && stop_app
 }
 
 ###
@@ -76,7 +87,7 @@ display_if_no_args_or_continue_if_match() {
 update_this_management_app() {
   # menu logic
   ! is_update_available && return # menu item n/a if not installed
-  display_if_no_args_or_continue_if_match $FUNCNAME && return
+  display_only_and_skip_func $FUNCNAME && return
 
   # function logic
   update_from_master
@@ -86,7 +97,7 @@ update_this_management_app() {
 install_app() {
   # menu logic
   is_app_installed && return
-  display_if_no_args_or_continue_if_match $FUNCNAME && return
+  display_only_and_skip_func $FUNCNAME && return
 
   # function logic
   {
@@ -114,7 +125,7 @@ install_app() {
 open_app() {
   # menu logic
   ! is_app_installed && return # menu item n/a if not installed
-  display_if_no_args_or_continue_if_match $FUNCNAME && return
+  display_only_and_skip_func $FUNCNAME && return
 
   # function logic
   open "http://$(get_host)"
@@ -125,7 +136,7 @@ stop_app() {
   # menu logic
   ! is_app_installed && return # menu item n/a if not installed
   ! is_app_running && return # menu item n/a if not running
-  display_if_no_args_or_continue_if_match $FUNCNAME && return
+  display_only_and_skip_func $FUNCNAME && return
 
   # function logic
   {
@@ -139,7 +150,7 @@ restart_app() {
   # menu logic
   ! is_app_installed && return # menu item n/a if not installed
   is_app_running && return # menu item n/a if running
-  display_if_no_args_or_continue_if_match $FUNCNAME && return
+  display_only_and_skip_func $FUNCNAME && return
 
   # function logic
   {
@@ -152,7 +163,7 @@ restart_app() {
 sync_app_to_remote() {
   # menu logic
   ! is_app_installed && return # menu item n/a if not installed
-  display_if_no_args_or_continue_if_match $FUNCNAME && return
+  display_only_and_skip_func $FUNCNAME && return
 
   # function logic
   do_in_terminal "echo $BASH_ARGV"
@@ -161,7 +172,7 @@ sync_app_to_remote() {
 
 clone_app() {
   # menu logic
-  display_if_no_args_or_continue_if_match $FUNCNAME && return
+  display_only_and_skip_func $FUNCNAME && return
 
   # function logic
   do_in_terminal "echo $BASH_ARGV"
@@ -171,7 +182,7 @@ clone_app() {
 start_shell_in_app() {
   # menu logic
   ! is_app_installed && return # menu item n/a if not installed
-  display_if_no_args_or_continue_if_match $FUNCNAME && return
+  display_only_and_skip_func $FUNCNAME && return
 
   # function logic
   do_in_terminal "echo $BASH_ARGV"
@@ -180,7 +191,7 @@ start_shell_in_app() {
 
 start_management_shell() {
   # menu logic
-  display_if_no_args_or_continue_if_match $FUNCNAME && return
+  display_only_and_skip_func $FUNCNAME && return
 
   # function logic
   do_in_terminal "cd $lib_dir/..; docker-compose run deploy bash"
@@ -190,7 +201,7 @@ start_management_shell() {
 show_app_logs() {
   # menu logic
   ! is_app_installed && return # menu item n/a if not installed
-  display_if_no_args_or_continue_if_match $FUNCNAME && return
+  display_only_and_skip_func $FUNCNAME && return
 
   # function logic
   do_in_terminal "echo $BASH_ARGV"
@@ -200,7 +211,7 @@ show_app_logs() {
 show_management_app_log() {
   # menu logic
   [[ ! -f "$log_file" ]] && return # menu item n/a if no log
-  display_if_no_args_or_continue_if_match $FUNCNAME && return
+  display_only_and_skip_func $FUNCNAME && return
 
   # function logic
   local script="$(write_to_bash_script "
@@ -214,7 +225,7 @@ show_management_app_log() {
 uninstall_app() {
   # menu logic
   ! is_app_installed && return # menu item n/a if not installed
-  display_if_no_args_or_continue_if_match $FUNCNAME && return
+  display_only_and_skip_func $FUNCNAME && return
 
   # function logic
   {
@@ -227,7 +238,7 @@ uninstall_app() {
 stop_other_apps() {
   # menu logic
   ! are_other_apps_running && return
-  display_if_no_args_or_continue_if_match $FUNCNAME && return
+  display_only_and_skip_func $FUNCNAME && return
 
   # function logic
   {
@@ -252,106 +263,92 @@ stop_other_apps() {
 # then use printf -v variable assignment and indirect expansion: ${!0}
 # to create desired vars func_name__text & func_name__icon at run time
 # icons from https://material.io/resources/icons/
-icon_prefix="https://raw.githubusercontent.com/google/material-design-icons/3.0.1"
 icon_color=$(is_dark_mode && echo "white" || echo "black")
 menu_items=(
   "update_this_management_app"
     "Update this managing app"
-    "$icon_prefix/action/1x_web/ic_system_update_alt_${icon_color}_48dp.png"
+    "icons/ic_system_update_alt_${icon_color}_48dp.png"
 
   "install_app"
     "Install & open Magento app in browser"
-    "$icon_prefix/editor/1x_web/ic_publish_${icon_color}_48dp.png"
-    #"$icon_prefix/communication/1x_web/ic_present_to_all_${icon_color}_48dp.png"
+    #"icons/ic_publish_${icon_color}_48dp.png"
+    "icons/ic_present_to_all_${icon_color}_48dp.png"
 
   "open_app"
     "Open Magento app in browser"
-    "$icon_prefix/action/1x_web/ic_launch_${icon_color}_48dp.png"
+    "icons/ic_launch_${icon_color}_48dp.png"
 
   "stop_app"
     "Stop Magento app"
-    "$icon_prefix/av/1x_web/ic_stop_${icon_color}_48dp.png"
+    "icons/ic_stop_${icon_color}_48dp.png"
 
   "restart_app"
     "Restart Magento app"
-    "$icon_prefix/av/1x_web/ic_play_arrow_${icon_color}_48dp.png"
+    "icons/ic_play_arrow_${icon_color}_48dp.png"
 
   #TODO
   "sync_app_to_remote"
     "Sync Magento app to remote env"
-    "$icon_prefix/notification/1x_web/ic_sync_${icon_color}_48dp.png"
+    "icons/ic_sync_${icon_color}_48dp.png"
 
   #TODO
   "clone_app"
     "Clone to new Magento app"
-    "$icon_prefix/content/1x_web/ic_content_copy_${icon_color}_48dp.png"
+    "icons/ic_content_copy_${icon_color}_48dp.png"
 
   "start_shell_in_app"
     "Start shell in Magento app"
-    "$icon_prefix/action/1x_web/ic_code_${icon_color}_48dp.png"
-    #"$icon_prefix/hardware/1x_web/ic_keyboard_${icon_color}_48dp.png"
+    "icons/ic_code_${icon_color}_48dp.png"
+    #"icons/ic_keyboard_${icon_color}_48dp.png"
 
   "start_management_shell"
     "Start management app shell"
-    "$icon_prefix/action/1x_web/ic_code_${icon_color}_48dp.png"
+    "icons/ic_code_${icon_color}_48dp.png"
 
   "show_app_logs"
     "Show Magento app logs"
-    "$icon_prefix/action/1x_web/ic_subject_${icon_color}_48dp.png"
+    "icons/ic_subject_${icon_color}_48dp.png"
 
   "show_management_app_log"
     "Show this managing app log"
-    "$icon_prefix/action/1x_web/ic_subject_${icon_color}_48dp.png"
+    "icons/ic_subject_${icon_color}_48dp.png"
 
   "uninstall_app"
     "Uninstall this Magento app"
-    "$icon_prefix/action/1x_web/ic_delete_${icon_color}_48dp.png"
+    "icons/ic_delete_${icon_color}_48dp.png"
 
   "stop_other_apps"
     "Stop all other Magento apps"
-    "$icon_prefix/av/1x_web/ic_stop_${icon_color}_48dp.png"
+    "icons/ic_stop_${icon_color}_48dp.png"
 )
 mi_length=${#menu_items[@]}
+bypass_menu_check=false
 
-icons_downloaded() {
-  # assume if 1st icon downloaded, all downloaded
-  local icon_filename="$(echo "${menu_items[2]}" | perl -pe 's/.*\///')"
-  [[ -f "$icon_dir/$icon_filename" ]]
-  return $?
-}
+###
+#
+# main logic
+#
+###
 
-use_local_icons() {
-  local index
-  for (( index=2; index < mi_length; index=((index+3)) )); do
-    menu_items[$index]="$icon_dir/$(echo "${menu_items[$index]}" | perl -pe 's/.*\///')"
-  done
-}
+# cd to app dir containing relevant docker-compose files
+cd "$lib_dir/.."
+[[ -f docker-compose.yml ]] && export_compose_project_name
 
-download_icons() {
-  local index
-  local urls=()
-  cd "$icon_dir"
-  for (( index=2; index < mi_length; index=((index+3)) )); do
-    urls+=(${menu_items[$index]})
-  done
-  echo "${urls[@]}" | xargs -n 1 curl -s -O
-}
+formatted_cached_docker_ps_output="$(
+  docker ps -a -f "label=com.magento.dockerized" --format "{{.Names}} {{.Status}}" | \
+    perl -pe 's/ (Up|Exited) .*/ \1/'
+)"
 
-icons_downloaded &&
-  use_local_icons ||
-  {
-    # must background and disconnect STDIN & STDOUT for Platypus menu to return asynchronously
-    download_icons > /dev/null 2>&1 & 
-  }
-
-#echo "$PPID"
 for (( index=0; index < mi_length; index=((index+3)) )); do
-  start=`gdate +%s.%N`
+  #start=`gdate +%s.%N`
   printf -v "${menu_items[$index]}__text" %s "${menu_items[((index+1))]}"
-  printf -v "${menu_items[$index]}__icon" %s "MENUITEMICON|${menu_items[((index+2))]}|"
+  printf -v "${menu_items[$index]}__icon" %s "MENUITEMICON|$lib_dir/../../${menu_items[((index+2))]}|"
   #n="${menu_items[$index]}__icon"; echo "${!n}"
   ${menu_items[$index]}
-  end=`gdate +%s.%N`
-  echo "${menu_items[$index]}"
-  echo "$end - $start" | bc -l
+  #end=`gdate +%s.%N`
+  #echo "${menu_items[$index]}"
+  #echo "$end - $start" | bc -l
 done
+
+# must background and disconnect STDIN & STDOUT for Platypus menu to return asynchronously
+detect_quit_and_stop_app > /dev/null 2>&1 &

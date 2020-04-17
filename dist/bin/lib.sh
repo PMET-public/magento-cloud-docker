@@ -65,10 +65,9 @@ timestamp_msg() {
   echo "[$(date -u +%FT%TZ)] $(msg ${@})"
 }
 
-lib_dir=$(echo "$(dirname $(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" "$BASH_SOURCE"))")
-log_file=$(echo "$lib_dir/../../$COMPOSE_PROJECT_NAME.log")
-icon_dir="$lib_dir/../../icons"
-mkdir -p "$icon_dir"
+lib_dir="$(echo "$(dirname "$(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" "$BASH_SOURCE")")")"
+log_file="$(echo "$lib_dir/../../$COMPOSE_PROJECT_NAME.log")"
+quit_detection_file="$(echo "$lib_dir/../../.quit_detection_file")"
 
 ###
 #
@@ -92,14 +91,16 @@ download_latest_master() {
 
 is_update_available() {
   [[ -f "$master_dir/.downloading" ]] && return # still downloading? update not available
-  [[ $(ls $master_dir | wc -l) -eq 0 ]] && {
-    download_latest_master &
+  [[ $(ls "$master_dir" | wc -l) -eq 0 ]] && {
+    # must background and disconnect STDIN & STDOUT for Platypus menu to return asynchronously
+    download_latest_master > /dev/null 2>&1 &
     return 1
   }
   for i in "${app_files[@]}"; do
     diff "$master_dir/$i" "$lib_dir/$i" > /dev/null || return 0 # found a diff? update available
   done
-  download_latest_master &
+  # must background and disconnect STDIN & STDOUT for Platypus menu to return asynchronously
+  download_latest_master > /dev/null 2>&1 &
   return 1
 }
 

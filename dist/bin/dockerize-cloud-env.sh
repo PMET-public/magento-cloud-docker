@@ -234,6 +234,7 @@ has_platypus &&
       "$app_dir.app"
     # mv app into app bundle
     mv "$app_dir" "$app_dir.app/Contents/Resources/app"
+    cp "$lib_dir/icons" "$app_dir.app/Contents/Resources/icons"
     # update symlinks with relative paths
     cd "$app_dir.app/Contents/Resources/"
     ln -sf "./app/bin/$management_script" "script"

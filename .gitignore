@@ -7,3 +7,5 @@
 /_workdir
 .quit_detection_file
 .dns-config.ini
+.ackrc
+.update

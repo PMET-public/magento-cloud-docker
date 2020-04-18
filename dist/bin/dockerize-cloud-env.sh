@@ -1,6 +1,8 @@
 #!/bin/bash
+set -e
 
-source "$(dirname $(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}"))/lib.sh"
+# shellcheck source=lib.sh
+source "$(dirname "$(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")")/lib.sh"
 
 # this script assembles the parts needed for a magento cloud docker deployment and
 # if supported tools/icons are detected, bundles into a OSX style app
@@ -18,7 +20,8 @@ source "$(dirname $(python -c "import os; import sys; print(os.path.realpath(sys
 #
 
 management_script="manage-dockerized-cloud-env.sh"
-app_icon_path="$(lib_d)/magento.icns"
+app_icon_path="$lib_dir/icons/magento.icns"
+status_menu_icon_path="$lib_dir/icons/magento-logo.png"
 http_port=$(( ( RANDOM % 10000 )  + 10000 ))
 rand_subdomain_suffix=$(LC_ALL=C tr -dc 'a-z' < /dev/random | fold -w 4 | head -n 1)
 tld="the1umastory.com"
@@ -26,23 +29,21 @@ tld="the1umastory.com"
 # platypus is the OSX app bundler https://github.com/sveinbjornt/Platypus
 has_platypus() {
   [[ "$(which platypus)" =~ "platypus" ]]
-  return $?
 }
 
 is_valid_git_url() {
   [[ "$1" =~ http.*\.git ]] || [[ "$1" =~ git.*\.git ]]
-  return $?
 }
 
 is_existing_cloud_env() {
   [[ "$env_is_existing_cloud" == "true" ]]
-  return $?
 }
 
 print_usage() {
   echo "
 Usage:
-  $(basename ${BASH_SOURCE[0]}) can either clone an existing cloud environment OR install a new Magento application from a Magento Cloud compatible git repository.
+  $(basename "${BASH_SOURCE[0]}") can either clone an existing cloud environment OR 
+  install a new Magento application from a Magento Cloud compatible git repository.
 
 Options:
   -h                        Display this help
@@ -94,28 +95,28 @@ You must provide either:
 - OR -
   2) a git url plus a specific branch or tag
 "
-[[ ! -z "$auth_json_path" && ! -f "$auth_json_path" ]] && error "Composer auth file not file: $auth_json_path"
-[[ ! -f "$app_icon_path" ]] && error "App icon not file: $app_icon_path"
+[[ -n "$auth_json_path" && ! -f "$auth_json_path" ]] && error "Composer auth file not found: $auth_json_path"
+[[ ! -f "$app_icon_path" ]] && error "App icon not found: $app_icon_path"
 
 
-is_existing_cloud_env &&
-  {
-    magento-cloud -q || error "The magento-cloud CLI was not found. To install, run
-    curl -sS https://accounts.magento.cloud/cli/installer | php"
-    app_name="$pid-$env"
-  } || {
-    is_valid_git_url "$git_url" ||
-      error "Please check your git url."
-    git_repo=$(echo "$git_url" | perl -pe 's/.*\/(.*)\.git/\1/')
-    app_name="$git_repo-$branch$tag"
-  }
+if is_existing_cloud_env; then
+  magento-cloud -q || error "The magento-cloud CLI was not found. To install, run
+  curl -sS https://accounts.magento.cloud/cli/installer | php"
+  app_name="$pid-$env"
+else
+  is_valid_git_url "$git_url" || error "Please check your git url."
+  git_repo=$(echo "$git_url" | perl -pe 's/.*\/(.*)\.git/\1/')
+  app_name="$git_repo-$branch$tag"
+fi
 
 # clone and then remove unwanted files from the git repo
 tmp_app_dir="$HOME/Downloads/$app_name"
 rm -rf "$tmp_app_dir" || :
-is_existing_cloud_env &&
-  magento-cloud get -e "$env" --depth=0 "$pid" "$tmp_app_dir" ||
+if is_existing_cloud_env; then
+  magento-cloud get -e "$env" --depth=0 "$pid" "$tmp_app_dir"
+else
   git clone "$git_url" --branch "$branch$tag" --depth 1 "$tmp_app_dir"
+fi
 rm -rf "$tmp_app_dir/.git"
 
 # create a clean copy (before composer install) of repo to hold assets with the EE version appended to the dir name
@@ -126,24 +127,22 @@ ee_version=$(
     s/[\S\s]*(cloud-metapackage|magento\/product-enterprise-edition)"[\S\s]*?"version": "([^"]*)[\S\s]*/\2/m and print
   ' "$tmp_app_dir/composer.lock"
 )
-app_dir=$tmp_app_dir-$ee_version
-rm -rf "$app_dir"  || :
+app_dir="$tmp_app_dir-$ee_version"
+rm -rf "$app_dir" || :
 cp -a "$tmp_app_dir" "$app_dir"
 subdomain=$(echo "$app_name-$ee_version-$rand_subdomain_suffix" | perl -pe 's/\./-/g')
 host="$subdomain.$tld"
 
-# include the managing script in app's bin dir
-mkdir -p "$app_dir/bin"
-cp "$lib_dir/$management_script" "$app_dir/bin/$management_script"
+# include the lib dir assets in app's bin dir
+cp -R "$lib_dir" "$app_dir"
 
 # if cloning existing env, download the media dir minus the cache
 # this will cause significant redundancy of images until can be deduped
-is_existing_cloud_env &&
-  {
+is_existing_cloud_env && {
     mkdir -p "$tmp_app_dir/pub/media"
     magento-cloud mount:download -y -p "$pid" -e "$env" -m pub/media --target "$tmp_app_dir/pub/media" --exclude=cache
     tar -C "$tmp_app_dir" -zcf "$app_dir/media.tar.gz" "pub/media"
-  }
+}
 
 # use default cloud integration env database configuration, so ece-tools deploy will work the same for docker and cloud
 grep -q DATABASE_CONFIGURATION "$app_dir/.magento.env.yaml" || perl -i -pe "s/^  deploy:\s*$/  deploy:
@@ -165,11 +164,12 @@ grep -q DATABASE_CONFIGURATION "$app_dir/.magento.env.yaml" || perl -i -pe "s/^ 
 # 3. do not run the composer.json install scripts (also to speed up the composer cache creation)
 # 4. use modified version of magento-cloud-docker to create modified docker-compose files
 # 5. restore original composer.json and composer.lock to ensure originals are used for deployment in containers
-cd "$tmp_app_dir"
+cd "$tmp_app_dir" || exit
 [[ ! -z "$auth_json_path" ]] && # if auth.json provided, use it
   cp "$auth_json_path" "$tmp_app_dir"
 [[ ! -f "auth.json" ]] && 
-  warning "No auth.json file detected! Composer may be rate-limited and/or unable to download required packages." && sleep 5
+  warning "No auth.json file detected! Composer may be rate-limited and/or unable to download required packages." &&
+  sleep 5
 # backup for later restore
 cp composer.json composer.json.bak
 cp composer.lock composer.lock.bak
@@ -194,57 +194,59 @@ mv composer.lock.bak composer.lock
 rm "$app_dir/auth.json" || :
 # special case: assuming some existing installed packages already have catalog imagery from modules in pub/media, we can delete that media
 # this can significantly reduce composer archive size
-is_existing_cloud_env && find .composer -path "*/catalog/product/*.jpg" -delete || :
+is_existing_cloud_env && {
+  find .composer -path "*/catalog/product/*.jpg" -delete || :
+}
 tar -zcf "$app_dir/.composer.tar.gz" .composer
 # del tmp dir
-cd "$app_dir" && rm -rf "$tmp_app_dir"
+cd "$app_dir" || exit
+rm -rf "$tmp_app_dir"
 
 # if cloning existing env, extract the DB into the expected dir
 is_existing_cloud_env &&
   magento-cloud db:dump -p "$pid" -e "$env" -d "$app_dir/.docker/mysql/docker-entrypoint-initdb.d/"
 
 # if cloning existing env, grab only the encryption key from the env's app/etc/env.php
-is_existing_cloud_env &&
+is_existing_cloud_env && {
+  mkdir -p "$app_dir/app/etc"
   magento-cloud ssh -p "$pid" -e "$env" "
     php -r '\$a = require_once(\"app/etc/env.php\");
     echo \"<?php return array ( \\\"crypt\\\"  => \";
     var_export(\$a[\"crypt\"]); echo \");\";'
   " > "$app_dir/app/etc/env.php"
+}
 
 # bundle with platypus
 if has_platypus; then
-  {
-    # create app with symlinks
-    platypus \
-      --app-icon "$app_icon_path" \
-      --status-item-kind 'Icon' \
-      --status-item-icon "$app_icon_path" \
-      --interface-type 'Status Menu' \
-      --symlink \
-      --interpreter '/bin/bash' \
-      --interpreter-args '-l' \
-      --overwrite \
-      --text-background-color '#000000' \
-      --text-foreground-color '#FFFFFF' \
-      --name "$subdomain" \
-      -u 'Keith Bentrup' \
-      --bundle-identifier 'com.magento.dockerized-magento' \
-      --bundled-file "/dev/null" \
-      "$app_dir/bin/$management_script" \
-      "$app_dir.app"
-    # mv app into app bundle
-    mv "$app_dir" "$app_dir.app/Contents/Resources/app"
-    cp "$lib_dir/icons" "$app_dir.app/Contents/Resources/icons"
-    # update symlinks with relative paths
-    cd "$app_dir.app/Contents/Resources/"
-    ln -sf "./app/bin/$management_script" "script"
-    rm null # remove empty temp symlink used for bundled-file
-    msg "Successfully created $app_dir.app"
-  } else {
-    warning "Platypus not found. OSX app bundle not generated."
-    echo "Install platypus with:"
-    warning "brew cask install platypus"
-    echo "Then install the CLI with these instructions:"
-    warning "https://github.com/sveinbjornt/Platypus/blob/master/Documentation/Documentation.md#show-shell-command"
-  }
+  # create app with symlinks
+  platypus \
+    --app-icon "$app_icon_path" \
+    --status-item-kind 'Icon' \
+    --status-item-icon "$status_menu_icon_path" \
+    --interface-type 'Status Menu' \
+    --symlink \
+    --interpreter '/usr/bin/env' \
+    --interpreter-args '-P|/usr/local/bin:/bin|bash' \
+    --overwrite \
+    --text-background-color '#000000' \
+    --text-foreground-color '#FFFFFF' \
+    --name "$subdomain" \
+    -u 'Keith Bentrup' \
+    --bundle-identifier 'com.magento.dockerized-magento' \
+    --bundled-file "/dev/null" \
+    "$app_dir/bin/$management_script" \
+    "$app_dir.app"
+  # mv app into app bundle
+  mv "$app_dir" "$app_dir.app/Contents/Resources/app"
+  # update symlinks with relative paths
+  cd "$app_dir.app/Contents/Resources/" || exit
+  ln -sf "./app/bin/$management_script" "script"
+  rm null # remove empty temp symlink used for bundled-file
+  msg "Successfully created $app_dir.app"
+else
+  warning "Platypus not found. OSX app bundle not generated."
+  echo "Install platypus with:"
+  warning "brew cask install platypus"
+  echo "Then install the CLI with these instructions:"
+  warning "https://github.com/sveinbjornt/Platypus/blob/master/Documentation/Documentation.md#show-shell-command"
 fi

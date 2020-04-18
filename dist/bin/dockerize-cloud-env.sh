@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source "$(dirname $(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" "$BASH_SOURCE"))/lib.sh"
+source "$(dirname $(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}"))/lib.sh"
 
 # this script assembles the parts needed for a magento cloud docker deployment and
 # if supported tools/icons are detected, bundles into a OSX style app
@@ -20,7 +20,7 @@ source "$(dirname $(python -c "import os; import sys; print(os.path.realpath(sys
 management_script="manage-dockerized-cloud-env.sh"
 app_icon_path="$(lib_d)/magento.icns"
 http_port=$(( ( RANDOM % 10000 )  + 10000 ))
-rand_subdomain_suffix=$(cat /dev/random | LC_ALL=C tr -dc 'a-z' | fold -w 4 | head -n 1)
+rand_subdomain_suffix=$(LC_ALL=C tr -dc 'a-z' < /dev/random | fold -w 4 | head -n 1)
 tld="the1umastory.com"
 
 # platypus is the OSX app bundler https://github.com/sveinbjornt/Platypus
@@ -42,7 +42,7 @@ is_existing_cloud_env() {
 print_usage() {
   echo "
 Usage:
-  $(basename $BASH_SOURCE) can either clone an existing cloud environment OR install a new Magento application from a Magento Cloud compatible git repository.
+  $(basename ${BASH_SOURCE[0]}) can either clone an existing cloud environment OR install a new Magento application from a Magento Cloud compatible git repository.
 
 Options:
   -h                        Display this help
@@ -66,7 +66,7 @@ while getopts "b:e:g:hp:t:a:i:" opt || [[ $# -eq 0 ]]; do
     b ) branch="$OPTARG" ;;
     t ) tag="$OPTARG" ;;
     a ) auth_json_path="$OPTARG" ;;
-    i ) app_icon="$OPTARG" ;;
+    i ) app_icon_path="$OPTARG" ;;
     \? )
       print_usage
       [[ -z "$OPTARG" ]] && error "Missing required option(s)."
@@ -212,7 +212,7 @@ is_existing_cloud_env &&
   " > "$app_dir/app/etc/env.php"
 
 # bundle with platypus
-has_platypus &&
+if has_platypus; then
   {
     # create app with symlinks
     platypus \
@@ -240,10 +240,11 @@ has_platypus &&
     ln -sf "./app/bin/$management_script" "script"
     rm null # remove empty temp symlink used for bundled-file
     msg "Successfully created $app_dir.app"
-  } || {
+  } else {
     warning "Platypus not found. OSX app bundle not generated."
     echo "Install platypus with:"
     warning "brew cask install platypus"
     echo "Then install the CLI with these instructions:"
     warning "https://github.com/sveinbjornt/Platypus/blob/master/Documentation/Documentation.md#show-shell-command"
   }
+fi

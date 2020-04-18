@@ -1,11 +1,17 @@
 #!/bin/bash
 
-source "$(dirname "$(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" "$BASH_SOURCE")")/lib.sh"
+source "$(dirname "$(python -c "import os; import sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")")/lib.sh"
 
 # the Platypus status menu app will initially run this script with no arguments
 # and display each line of STDOUT as an option
 # so it's critical to complete ASAP to reduce perceived latency
 # when an option is selected, the option text is passed as an argument to a second run on this script
+
+recommended_vm_cpu=4
+recommended_vm_mem_mb=4096
+recommended_vm_swap_mb=2048
+bytes_in_mb=1048576
+
 
 do_in_terminal() {
   script_path="$(echo "$1" | perl -pe 's/ /\\\\ /g')"
@@ -14,13 +20,14 @@ do_in_terminal() {
     if not (exists window 1) then reopen
     activate
     do script \"$script_path\" in window 1
-  end tell" 2>&1 >> /tmp/out
+  end tell" >> /tmp/out 2>&1
 }
 
 write_to_bash_script() {
-  local tmp_script_dir="$lib_dir/../../tmp"
+  local tmp_script_dir script
+  tmp_script_dir="$lib_dir/../../tmp"
   mkdir -p "$tmp_script_dir"
-  local script="$tmp_script_dir/$(date -u "+%Y%m%d_%H%M%SZ").sh"
+  script="$tmp_script_dir/$(date -u "+%Y%m%d_%H%M%SZ").sh"
   echo "#!/bin/bash
 source \"$lib_dir/lib.sh\"
 ${@}
@@ -34,7 +41,7 @@ is_docker_installed() {
 }
 
 is_docker_running() {
-  ps aux | grep -q "[c]om.docker.hyperkit"
+  pgrep -q com.docker.hyperkit
 }
 
 is_docker_ready() {
@@ -79,7 +86,9 @@ is_app_running() {
 }
 
 are_other_apps_running() {
-  echo "$formatted_cached_docker_ps_output" | grep -q -v "^${COMPOSE_PROJECT_NAME}_db_1 "
+  echo "$formatted_cached_docker_ps_output" | \
+    grep -v "^${COMPOSE_PROJECT_NAME}_db_1 " | \
+    grep -q -v ' Exited$'
   return $?
 }
 
@@ -90,10 +99,11 @@ display_only_and_skip_func() {
     bypass_menu_check="false"
     return 1
   }
-  local mi_text=${1}__text
-  local mi_icon=${1}__icon
+  local mi_text mi_icon
+  mi_text=${1}__text
+  mi_icon=${1}__icon
   started_without_args && echo "${!mi_icon}${!mi_text}" && return
-  [[ "${!mi_text}" != "$BASH_ARGV" ]] && return
+  [[ "${!mi_text}" != "${BASH_ARGV[0]}" ]] && return
 }
 
 detect_quit_and_stop_app() {
@@ -115,8 +125,8 @@ detect_quit_and_stop_app() {
 
 install_docker() {
   # menu logic
-  is_docker_installed && return # menu item n/a if not installed
-  display_only_and_skip_func $FUNCNAME && return
+  is_docker_installed && return
+  display_only_and_skip_func "${FUNCNAME[0]}" && return
 
   # function logic
   :
@@ -127,7 +137,7 @@ install_docker() {
 start_docker() {
   # menu logic
   is_docker_running && return
-  display_only_and_skip_func $FUNCNAME && exit
+  display_only_and_skip_func "${FUNCNAME[0]}" && exit
 
   # function logic
   open --background -a Docker
@@ -137,7 +147,7 @@ start_docker() {
 wait_for_docker() {
   # menu logic
   is_docker_ready && return 
-  display_only_and_skip_func $FUNCNAME && exit
+  display_only_and_skip_func "${FUNCNAME[0]}" && exit
 
   # function logic
   :
@@ -147,7 +157,7 @@ wait_for_docker() {
 optimize_docker() {
   # menu logic
   ! can_optimize_vm_cpus && ! can_optimize_vm_mem && ! can_optimize_vm_swap && return
-  display_only_and_skip_func $FUNCNAME && exit
+  display_only_and_skip_func "${FUNCNAME[0]}" && exit
 
   # function logic
   {
@@ -164,18 +174,18 @@ optimize_docker() {
 
 update_this_management_app() {
   # menu logic
-  ! is_update_available && return # menu item n/a if not installed
-  display_only_and_skip_func $FUNCNAME && return
+  ! is_update_available && return
+  display_only_and_skip_func "${FUNCNAME[0]}" && return
 
   # function logic
-  update_from_master
+  update_from_local_dir
   exit
 }
 
 install_app() {
   # menu logic
   is_app_installed && return
-  display_only_and_skip_func $FUNCNAME && return
+  display_only_and_skip_func "${FUNCNAME[0]}" && return
 
   # function logic
   {
@@ -204,8 +214,8 @@ install_app() {
 
 open_app() {
   # menu logic
-  ! is_app_installed && return # menu item n/a if not installed
-  display_only_and_skip_func $FUNCNAME && return
+  ! is_app_installed && return
+  display_only_and_skip_func "${FUNCNAME[0]}" && return
 
   # function logic
   open "http://$(get_host)"
@@ -214,9 +224,9 @@ open_app() {
 
 stop_app() {
   # menu logic
-  ! is_app_installed && return # menu item n/a if not installed
-  ! is_app_running && return # menu item n/a if not running
-  display_only_and_skip_func $FUNCNAME && return
+  ! is_app_installed && return
+  ! is_app_running && return
+  display_only_and_skip_func "${FUNCNAME[0]}" && return
 
   # function logic
   {
@@ -228,9 +238,9 @@ stop_app() {
 
 restart_app() {
   # menu logic
-  ! is_app_installed && return # menu item n/a if not installed
-  is_app_running && return # menu item n/a if running
-  display_only_and_skip_func $FUNCNAME && return
+  ! is_app_installed && return
+  is_app_running && return
+  display_only_and_skip_func "${FUNCNAME[0]}" && return
 
   # function logic
   {
@@ -242,30 +252,31 @@ restart_app() {
 
 sync_app_to_remote() {
   # menu logic
-  ! is_app_installed && return # menu item n/a if not installed
-  display_only_and_skip_func $FUNCNAME && return
+  ! is_app_installed && return
+  display_only_and_skip_func "${FUNCNAME[0]}" && return
 
   # function logic
-  do_in_terminal "echo $BASH_ARGV"
+  do_in_terminal "echo ${BASH_ARGV[*]}"
   exit
 }
 
 clone_app() {
   # menu logic
-  display_only_and_skip_func $FUNCNAME && return
+  display_only_and_skip_func "${FUNCNAME[0]}" && return
 
   # function logic
-  do_in_terminal "echo $BASH_ARGV"
+  do_in_terminal "echo ${BASH_ARGV[*]}"
   exit
 }
 
 start_shell_in_app() {
   # menu logic
-  ! is_app_installed && return # menu item n/a if not installed
-  display_only_and_skip_func $FUNCNAME && return
+  ! is_app_installed && return
+  display_only_and_skip_func "${FUNCNAME[0]}" && return
 
   # function logic
-  local script="$(write_to_bash_script "
+  local script
+  script="$(write_to_bash_script "
     cd \"$lib_dir/..\"
     docker run deploy bash
   ")"
@@ -275,10 +286,11 @@ start_shell_in_app() {
 
 start_management_shell() {
   # menu logic
-  display_only_and_skip_func $FUNCNAME && return
+  display_only_and_skip_func "${FUNCNAME[0]}" && return
 
   # function logic
-  local script="$(write_to_bash_script "
+  local script=
+  script="$(write_to_bash_script "
     cd \"$lib_dir/..\"
   ")"
   do_in_terminal "$script"
@@ -287,21 +299,22 @@ start_management_shell() {
 
 show_app_logs() {
   # menu logic
-  ! is_app_installed && return # menu item n/a if not installed
-  display_only_and_skip_func $FUNCNAME && return
+  ! is_app_installed && return
+  display_only_and_skip_func "${FUNCNAME[0]}" && return
 
   # function logic
-  do_in_terminal "echo $BASH_ARGV"
+  do_in_terminal "echo ${BASH_ARGV[*]}"
   exit
 }
 
 show_management_app_log() {
   # menu logic
-  [[ ! -f "$log_file" ]] && return # menu item n/a if no log
-  display_only_and_skip_func $FUNCNAME && return
+  [[ ! -f "$log_file" ]] && return
+  display_only_and_skip_func "${FUNCNAME[0]}" && return
 
   # function logic
-  local script="$(write_to_bash_script "
+  local script
+  script="$(write_to_bash_script "
   msg Last 20 + follow
   tail -n 20 -f \"$log_file\"
   ")"
@@ -311,8 +324,8 @@ show_management_app_log() {
 
 uninstall_app() {
   # menu logic
-  ! is_app_installed && return # menu item n/a if not installed
-  display_only_and_skip_func $FUNCNAME && return
+  ! is_app_installed && return
+  display_only_and_skip_func "${FUNCNAME[0]}" && return
 
   # function logic
   {
@@ -325,7 +338,7 @@ uninstall_app() {
 stop_other_apps() {
   # menu logic
   ! are_other_apps_running && return
-  display_only_and_skip_func $FUNCNAME && return
+  display_only_and_skip_func "${FUNCNAME[0]}" && return
 
   # function logic
   {
@@ -439,7 +452,7 @@ bypass_menu_check=false
 cd "$lib_dir/.."
 [[ -f docker-compose.yml ]] && export_compose_project_name
 
-is_docker_running && formatted_cached_docker_ps_output="$(
+is_docker_ready && formatted_cached_docker_ps_output="$(
   docker ps -a -f "label=com.magento.dockerized" --format "{{.Names}} {{.Status}}" | \
     perl -pe 's/ (Up|Exited) .*/ \1/'
 )"

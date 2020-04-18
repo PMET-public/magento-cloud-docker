@@ -29,6 +29,35 @@ ${@}
   echo "$script"
 }
 
+is_docker_installed() {
+  which docker > /dev/null
+}
+
+is_docker_running() {
+  ps aux | grep -q "[c]om.docker.hyperkit"
+}
+
+is_docker_ready() {
+  docker ps > /dev/null 2>&1
+}
+
+can_optimize_vm_cpus() {
+  cpus_for_vm=$(grep '"cpus"' "$docker_settings_file" | perl -pe 's/.*: (\d+),/\1/')
+  cpus_available=$(nproc)
+  [[ cpus_for_vm -lt 4 && cpus_available -gt 4 ]]
+}
+
+can_optimize_vm_mem() {
+  memory_for_vm=$(grep '"memoryMiB"' "$docker_settings_file" | perl -pe 's/.*: (\d+),/\1/')
+  memory_available=$(( $(sysctl -n hw.memsize) / 1048576 ))
+  [[ memory_for_vm -lt 4096 && memory_available -ge 8192 ]]
+}
+
+can_optimize_vm_swap() {
+  swap_for_vm=$(grep '"swapMiB"' "$docker_settings_file" | perl -pe 's/.*: (\d+),/\1/')
+  [[ swap_for_vm -lt 2048 ]]
+}
+
 is_app_installed() {
   [[ -z "$COMPOSE_PROJECT_NAME" ]] && return 1
   [[ ! -z "$app_is_installed" ]] ||
@@ -84,6 +113,55 @@ detect_quit_and_stop_app() {
 #
 ###
 
+install_docker() {
+  # menu logic
+  is_docker_installed && return # menu item n/a if not installed
+  display_only_and_skip_func $FUNCNAME && return
+
+  # function logic
+  :
+  exit
+
+}
+
+start_docker() {
+  # menu logic
+  is_docker_running && return
+  display_only_and_skip_func $FUNCNAME && exit
+
+  # function logic
+  open --background -a Docker
+  exit
+}
+
+wait_for_docker() {
+  # menu logic
+  is_docker_ready && return 
+  display_only_and_skip_func $FUNCNAME && exit
+
+  # function logic
+  :
+  exit
+}
+
+optimize_docker() {
+  # menu logic
+  ! can_optimize_vm_cpus && ! can_optimize_vm_mem && ! can_optimize_vm_swap && return
+  display_only_and_skip_func $FUNCNAME && exit
+
+  # function logic
+  {
+    timestamp_msg "${!mi_text}"
+    cp "$docker_settings_file" "$docker_settings_file.bak"
+    can_optimize_vm_cpus && perl -i -pe 's/("cpus"\s*:\s*)\d+/${1}4/' "$docker_settings_file"
+    can_optimize_vm_mem && perl -i -pe 's/("swapMiB"\s*:\s*)\d+/${1}2048/' "$docker_settings_file"
+    can_optimize_vm_swap && perl -i -pe 's/("memoryMiB"\s*:\s*)\d+/${1}4096/' "$docker_settings_file"
+    osascript -e 'quit app "Docker"'
+    open --background -a Docker
+  } >> "$log_file" 2>&1 &
+  exit
+}
+
 update_this_management_app() {
   # menu logic
   ! is_update_available && return # menu item n/a if not installed
@@ -118,7 +196,9 @@ install_app() {
     docker-compose run deploy magento-command config:set system/full_page_cache/caching_application 2 --lock-env
     docker-compose run deploy cloud-post-deploy
     open "http://$(get_host)"
-  } >> "$log_file" 2>&1
+  } >> "$log_file" 2>&1 &
+  bypass_menu_check=true
+  show_management_app_log
   exit
 }
 
@@ -185,7 +265,11 @@ start_shell_in_app() {
   display_only_and_skip_func $FUNCNAME && return
 
   # function logic
-  do_in_terminal "echo $BASH_ARGV"
+  local script="$(write_to_bash_script "
+    cd \"$lib_dir/..\"
+    docker run deploy bash
+  ")"
+  do_in_terminal "$script"
   exit
 }
 
@@ -194,7 +278,10 @@ start_management_shell() {
   display_only_and_skip_func $FUNCNAME && return
 
   # function logic
-  do_in_terminal "cd $lib_dir/..; docker-compose run deploy bash"
+  local script="$(write_to_bash_script "
+    cd \"$lib_dir/..\"
+  ")"
+  do_in_terminal "$script"
   exit
 }
 
@@ -216,7 +303,7 @@ show_management_app_log() {
   # function logic
   local script="$(write_to_bash_script "
   msg Last 20 + follow
-  tail -n 20 -f $log_file
+  tail -n 20 -f \"$log_file\"
   ")"
   do_in_terminal "$script"
   exit
@@ -265,63 +352,81 @@ stop_other_apps() {
 # icons from https://material.io/resources/icons/
 icon_color=$(is_dark_mode && echo "white" || echo "black")
 menu_items=(
+
+  "install_docker"
+    "Install Docker to continue"
+    "ic_present_to_all_${icon_color}_48dp.png"
+
+  "start_docker"
+    "Start Docker to continue"
+    "ic_play_arrow_${icon_color}_48dp.png"
+
+  "wait_for_docker"
+    "Please wait. Docker starting ..."
+    "ic_av_timer_${icon_color}_48dp.png"
+
+  "optimize_docker"
+    "Optimize Docker for better performance"
+    "baseline_speed_${icon_color}_48dp.png"
+
   "update_this_management_app"
     "Update this managing app"
-    "icons/ic_system_update_alt_${icon_color}_48dp.png"
+    "ic_system_update_alt_${icon_color}_48dp.png"
 
   "install_app"
     "Install & open Magento app in browser"
-    #"icons/ic_publish_${icon_color}_48dp.png"
-    "icons/ic_present_to_all_${icon_color}_48dp.png"
+    #"ic_publish_${icon_color}_48dp.png"
+    "ic_present_to_all_${icon_color}_48dp.png"
 
   "open_app"
     "Open Magento app in browser"
-    "icons/ic_launch_${icon_color}_48dp.png"
+    "ic_launch_${icon_color}_48dp.png"
 
   "stop_app"
     "Stop Magento app"
-    "icons/ic_stop_${icon_color}_48dp.png"
+    "ic_stop_${icon_color}_48dp.png"
 
   "restart_app"
     "Restart Magento app"
-    "icons/ic_play_arrow_${icon_color}_48dp.png"
+    "ic_play_arrow_${icon_color}_48dp.png"
 
   #TODO
   "sync_app_to_remote"
     "Sync Magento app to remote env"
-    "icons/ic_sync_${icon_color}_48dp.png"
+    "ic_sync_${icon_color}_48dp.png"
 
   #TODO
   "clone_app"
     "Clone to new Magento app"
-    "icons/ic_content_copy_${icon_color}_48dp.png"
+    "ic_content_copy_${icon_color}_48dp.png"
 
   "start_shell_in_app"
     "Start shell in Magento app"
-    "icons/ic_code_${icon_color}_48dp.png"
-    #"icons/ic_keyboard_${icon_color}_48dp.png"
+    "ic_code_${icon_color}_48dp.png"
+    #"ic_keyboard_${icon_color}_48dp.png"
 
   "start_management_shell"
     "Start management app shell"
-    "icons/ic_code_${icon_color}_48dp.png"
+    "ic_code_${icon_color}_48dp.png"
 
   "show_app_logs"
     "Show Magento app logs"
-    "icons/ic_subject_${icon_color}_48dp.png"
+    "ic_subject_${icon_color}_48dp.png"
 
   "show_management_app_log"
     "Show this managing app log"
-    "icons/ic_subject_${icon_color}_48dp.png"
+    "ic_subject_${icon_color}_48dp.png"
 
   "uninstall_app"
     "Uninstall this Magento app"
-    "icons/ic_delete_${icon_color}_48dp.png"
+    "ic_delete_${icon_color}_48dp.png"
 
   "stop_other_apps"
     "Stop all other Magento apps"
-    "icons/ic_stop_${icon_color}_48dp.png"
+    "ic_stop_${icon_color}_48dp.png"
 )
 mi_length=${#menu_items[@]}
+docker_settings_file="$HOME/Library/Group Containers/group.com.docker/settings.json"
 bypass_menu_check=false
 
 ###
@@ -334,7 +439,7 @@ bypass_menu_check=false
 cd "$lib_dir/.."
 [[ -f docker-compose.yml ]] && export_compose_project_name
 
-formatted_cached_docker_ps_output="$(
+is_docker_running && formatted_cached_docker_ps_output="$(
   docker ps -a -f "label=com.magento.dockerized" --format "{{.Names}} {{.Status}}" | \
     perl -pe 's/ (Up|Exited) .*/ \1/'
 )"
@@ -342,7 +447,7 @@ formatted_cached_docker_ps_output="$(
 for (( index=0; index < mi_length; index=((index+3)) )); do
   #start=`gdate +%s.%N`
   printf -v "${menu_items[$index]}__text" %s "${menu_items[((index+1))]}"
-  printf -v "${menu_items[$index]}__icon" %s "MENUITEMICON|$lib_dir/../../${menu_items[((index+2))]}|"
+  printf -v "${menu_items[$index]}__icon" %s "MENUITEMICON|$lib_dir/../../icons/${menu_items[((index+2))]}|"
   #n="${menu_items[$index]}__icon"; echo "${!n}"
   ${menu_items[$index]}
   #end=`gdate +%s.%N`

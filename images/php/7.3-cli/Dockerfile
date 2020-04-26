@@ -37,6 +37,7 @@ RUN apt-get update \
   netcat \
   less \
   strace \
+  rsync \
   libbz2-dev \
   libjpeg62-turbo-dev \
   libpng-dev \

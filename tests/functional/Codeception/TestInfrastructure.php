@@ -308,6 +308,16 @@ class TestInfrastructure extends BaseModule
     }
 
     /**
+     * Adds ece-tools repo to composer.json
+     *
+     * @return bool
+     */
+    public function addEceToolsGitRepoToComposer(): bool
+    {
+        return $this->addGitRepoToComposer('ece_tools');
+    }
+
+    /**
      * @param string $name
      * @return bool
      */
@@ -349,13 +359,16 @@ class TestInfrastructure extends BaseModule
      */
     public function runBashCommand(string $command): bool
     {
-        return $this->taskExecStack()
+        $result = $this->taskExecStack()
             ->printOutput($this->_getConfig('printOutput'))
             ->interactive(false)
             ->dir($this->getWorkDirPath())
             ->exec($command)
-            ->run()
-            ->wasSuccessful();
+            ->run();
+
+        static::$output = $result->getMessage();
+
+        return $result->wasSuccessful();
     }
 
     /**
@@ -375,6 +388,33 @@ class TestInfrastructure extends BaseModule
             ->exec(sprintf('./vendor/bin/ece-docker %s', $command))
             ->run()
             ->wasSuccessful();
+    }
+
+    /**
+     * Replace magento images with cloud FT images in docker-compose.yml
+     *
+     * @return bool
+     */
+    public function replaceImagesWithGenerated(): bool
+    {
+
+        if (true === $this->_getConfig('use_generated_images')) {
+            $this->debug('Tests use new generatedx Docker images');
+            $path = $this->getWorkDirPath() . DIRECTORY_SEPARATOR . 'docker-compose.yml';
+
+            return (bool)file_put_contents(
+                $path,
+                preg_replace(
+                    '/(magento\/magento-cloud-docker-(\w+)):((\d+\.\d+|latest)(\-fpm|\-cli)?(\-\d+\.\d+))/i',
+                    'cloudft/$2:$4$5-' . $this->_getConfig('version_generated_images'),
+                    file_get_contents($path)
+                )
+            );
+        }
+
+        $this->debug('Tests use default Docker images');
+
+        return true;
     }
 
     /**
@@ -452,6 +492,30 @@ class TestInfrastructure extends BaseModule
     {
         return $this->writeYamlConfiguration(
             $this->getWorkDirPath() . DIRECTORY_SEPARATOR . self::MAGENTO_APP_YAML,
+            $data
+        );
+    }
+
+    /**
+     * Returns array from .magento.env.yaml
+     *
+     * @return array
+     */
+    public function readEnvMagentoYaml(): array
+    {
+        return $this->readYamlConfiguration($this->getWorkDirPath() . DIRECTORY_SEPARATOR . self::MAGENTO_ENV_YAML);
+    }
+
+    /**
+     * Saves configuration in the .magento.env.yaml file
+     *
+     * @param array $data
+     * @return bool
+     */
+    public function writeEnvMagentoYaml(array $data): bool
+    {
+        return $this->writeYamlConfiguration(
+            $this->getWorkDirPath() . DIRECTORY_SEPARATOR . self::MAGENTO_ENV_YAML,
             $data
         );
     }

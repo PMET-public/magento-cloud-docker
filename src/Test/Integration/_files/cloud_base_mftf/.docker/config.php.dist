@@ -16,12 +16,6 @@ return [
                 'host' => 'redis',
                 'port' => '6379'
             ]
-        ],
-        'elasticsearch' => [
-            [
-                'host' => 'elasticsearch',
-                'port' => '9200'
-            ]
         ]
     ])),
     'MAGENTO_CLOUD_ROUTES' => base64_encode(json_encode([
@@ -38,5 +32,10 @@ return [
         'ADMIN_EMAIL' => 'admin@example.com',
         'ADMIN_PASSWORD' => '123123q',
         'ADMIN_URL' => 'admin'
+    ])),
+    'MAGENTO_CLOUD_APPLICATION' => base64_encode(json_encode([
+        'hooks' => [
+
+        ]
     ])),
 ];

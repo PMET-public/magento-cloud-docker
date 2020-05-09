@@ -110,8 +110,12 @@ class ExtensionResolver
     public function get(Config $config): array
     {
         $phpVersion = $config->getServiceVersion(ServiceInterface::SERVICE_PHP);
+        $enabledPhpExtensions = [];
+        foreach ($config->getEnabledPhpExtensions() as $phpExtension) {
+            is_array($phpExtension) ? : array_push($enabledPhpExtensions, $phpExtension);
+        }
         $enabledExtensions = array_unique(
-            array_merge(self::DEFAULT_PHP_EXTENSIONS, $config->getEnabledPhpExtensions())
+            array_merge(self::DEFAULT_PHP_EXTENSIONS, $enabledPhpExtensions)
         );
         $phpExtensions = array_diff(
             $enabledExtensions,
@@ -172,7 +176,7 @@ class ExtensionResolver
                 '>=7.0' => [self::EXTENSION_TYPE => self::EXTENSION_TYPE_CORE],
             ],
             'gd' => [
-                '>=7.0' => [
+                '>=7.0 <=7.3' => [
                     self::EXTENSION_TYPE => self::EXTENSION_TYPE_CORE,
                     self::EXTENSION_OS_DEPENDENCIES => ['libjpeg62-turbo-dev', 'libpng-dev', 'libfreetype6-dev'],
                     self::EXTENSION_CONFIGURE_OPTIONS => [
@@ -180,6 +184,15 @@ class ExtensionResolver
                         '--with-jpeg-dir=/usr/include/'
                     ],
                 ],
+                '>=7.4' => [
+                    self::EXTENSION_TYPE => self::EXTENSION_TYPE_CORE,
+                    self::EXTENSION_OS_DEPENDENCIES => ['libjpeg62-turbo-dev', 'libpng-dev', 'libfreetype6-dev'],
+                    self::EXTENSION_CONFIGURE_OPTIONS => [
+                        '--with-freetype=/usr/include/',
+                        '--with-jpeg=/usr/include/'
+                    ],
+                ],
+
             ],
             'geoip' => [
                 '>=7.0' => [
@@ -207,7 +220,7 @@ class ExtensionResolver
                 ],
             ],
             'imap' => [
-                '>=7.0' => [
+                '>=7.0 <=7.3'  => [
                     self::EXTENSION_TYPE => self::EXTENSION_TYPE_CORE,
                     self::EXTENSION_OS_DEPENDENCIES => ['libc-client-dev', 'libkrb5-dev'],
                     self::EXTENSION_CONFIGURE_OPTIONS => ['--with-kerberos', '--with-imap-ssl'],
@@ -269,7 +282,7 @@ class ExtensionResolver
                 '>=7.0' => [self::EXTENSION_TYPE => self::EXTENSION_TYPE_PECL],
             ],
             'recode' => [
-                '>=7.0' => [
+                '>=7.0 <=7.3' => [
                     self::EXTENSION_TYPE => self::EXTENSION_TYPE_CORE,
                     self::EXTENSION_OS_DEPENDENCIES => ['librecode0', 'librecode-dev'],
                 ],
@@ -350,9 +363,13 @@ BASH
                     // https://intellij-support.jetbrains.com/hc/en-us/community/posts/360003410140-PHPStorm-with-PHP7-3-and-xdebug-2-7-0
                     self::EXTENSION_PACKAGE_NAME => 'xdebug-2.6.1',
                 ],
-                '>=7.3' => [
+                '>=7.3 <7.4' => [
                     self::EXTENSION_TYPE => self::EXTENSION_TYPE_PECL,
                     self::EXTENSION_PACKAGE_NAME => 'xdebug-2.7.1',
+                ],
+                '>=7.4' => [
+                    self::EXTENSION_TYPE => self::EXTENSION_TYPE_PECL,
+                    self::EXTENSION_PACKAGE_NAME => 'xdebug-2.9.3',
                 ],
             ],
             'xmlrpc' => [
@@ -371,17 +388,21 @@ BASH
                 ],
             ],
             'zip' => [
-                '>=7.0' => [
+                '>=7.0 <=7.3' => [
                     self::EXTENSION_TYPE => self::EXTENSION_TYPE_CORE,
                     self::EXTENSION_OS_DEPENDENCIES => ['libzip-dev', 'zip'],
                     self::EXTENSION_CONFIGURE_OPTIONS => ['--with-libzip'],
+                ],
+                '>=7.4' => [
+                    self::EXTENSION_TYPE => self::EXTENSION_TYPE_CORE,
+                    self::EXTENSION_OS_DEPENDENCIES => ['libzip-dev', 'zip'],
                 ],
             ],
             'pcntl' => [
                 '>=7.0' => [self::EXTENSION_TYPE => self::EXTENSION_TYPE_CORE],
             ],
             'ioncube' => [
-                '>=7.0' => [
+                '>=7.0 <=7.3' => [
                     self::EXTENSION_TYPE => self::EXTENSION_TYPE_INSTALLATION_SCRIPT,
                     self::EXTENSION_INSTALLATION_SCRIPT => <<< BASH
 cd /tmp

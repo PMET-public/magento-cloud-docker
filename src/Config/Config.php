@@ -199,8 +199,15 @@ class Config
 
         if (!$this->all()->has($key)) {
             throw new ConfigurationMismatchException(sprintf(
-                'Service version for %s is not defined',
+                'Service version for "%s" is not defined',
                 $key
+            ));
+        }
+
+        if (!$this->hasServiceEnabled($name)) {
+            throw new ConfigurationMismatchException(sprintf(
+                'Service version for "%s" is not enabled',
+                $name
             ));
         }
 
@@ -229,7 +236,7 @@ class Config
      */
     public function getMounts(): array
     {
-        return $this->all()->get(SourceInterface::MOUNTS, []);
+        return (array)$this->all()->get(SourceInterface::MOUNTS, []);
     }
 
     /**
@@ -251,12 +258,30 @@ class Config
     }
 
     /**
+     * @return string|null
+     * @throws ConfigurationMismatchException
+     */
+    public function getDbQuotePortsExpose(): ?string
+    {
+        return $this->all()->get(SourceInterface::SYSTEM_EXPOSE_DB_QUOTE_PORTS);
+    }
+
+    /**
+     * @return string|null
+     * @throws ConfigurationMismatchException
+     */
+    public function getDbSalesPortsExpose(): ?string
+    {
+        return $this->all()->get(SourceInterface::SYSTEM_EXPOSE_DB_SALES_PORTS);
+    }
+
+    /**
      * @return array
      * @throws ConfigurationMismatchException
      */
     public function getEnabledPhpExtensions(): array
     {
-        return $this->all()->get(SourceInterface::PHP_ENABLED_EXTENSIONS, []);
+        return (array)$this->all()->get(SourceInterface::PHP_ENABLED_EXTENSIONS, []);
     }
 
     /**
@@ -265,7 +290,7 @@ class Config
      */
     public function getDisabledPhpExtensions(): array
     {
-        return $this->all()->get(SourceInterface::PHP_DISABLED_EXTENSIONS, []);
+        return (array)$this->all()->get(SourceInterface::PHP_DISABLED_EXTENSIONS, []);
     }
 
     /**
@@ -289,6 +314,8 @@ class Config
             $config->set(SourceInterface::VARIABLES . '.' . 'MFTF_UTILS', 1);
         }
 
+        $config->set(SourceInterface::VARIABLES . '.INSTALLATION_TYPE', $this->get(SourceInterface::INSTALLATION_TYPE));
+
         return $config->get(SourceInterface::VARIABLES);
     }
 
@@ -296,19 +323,93 @@ class Config
      * Returns host value or default if host not set
      *
      * @return string
+     * @throws ConfigurationMismatchException
      */
     public function getHost(): string
     {
-        return $this->get(SourceInterface::CONFIG_HOST);
+        if (!$this->all()->has(SourceInterface::SYSTEM_HOST)) {
+            throw new ConfigurationMismatchException('Required config "host" is not provided');
+        }
+
+        return $this->all()->get(SourceInterface::SYSTEM_HOST);
     }
 
     /**
      * Returns port value or default if port not set
      *
      * @return string
+     * @throws ConfigurationMismatchException
      */
     public function getPort(): string
     {
-        return $this->get(SourceInterface::CONFIG_PORT);
+        if (!$this->all()->has(SourceInterface::SYSTEM_PORT)) {
+            throw new ConfigurationMismatchException('Required config "port" is not provided');
+        }
+
+        return (string)$this->all()->get(SourceInterface::SYSTEM_PORT);
+    }
+
+    /**
+     * @return string
+     * @throws ConfigurationMismatchException
+     */
+    public function getName(): string
+    {
+        if (!$this->all()->has(SourceInterface::NAME)) {
+            throw new ConfigurationMismatchException('Required parameter "name" is not provided');
+        }
+
+        return $this->all()->get(SourceInterface::NAME);
+    }
+
+    /**
+     * @return string
+     * @throws ConfigurationMismatchException
+     */
+    public function getNameWithPrefix(): string
+    {
+        return $this->getName() . '-';
+    }
+
+    /**
+     * @return array
+     * @throws ConfigurationMismatchException
+     */
+    public function getHooks(): array
+    {
+        return (array)$this->all()->get(SourceInterface::HOOKS);
+    }
+
+    /**
+     * @return string|null
+     * @throws ConfigurationMismatchException
+     */
+    public function getMagentoVersion(): ?string
+    {
+        return $this->all()->get(SourceInterface::MAGENTO_VERSION);
+    }
+
+    /**
+     * @return int
+     * @throws ConfigurationMismatchException
+     */
+    public function getDbIncrementIncrement(): int
+    {
+        return max(
+            (int)$this->all()->get(SourceInterface::SYSTEM_DB_INCREMENT_INCREMENT, 1),
+            1
+        );
+    }
+
+    /**
+     * @return int
+     * @throws ConfigurationMismatchException
+     */
+    public function getDbIncrementOffset(): int
+    {
+        return max(
+            (int)$this->all()->get(SourceInterface::SYSTEM_DB_INCREMENT_OFFSET, 1),
+            1
+        );
     }
 }

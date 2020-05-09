@@ -83,7 +83,11 @@ class BuildComposeTest extends TestCase
                     [CliSource::OPTION_MODE, BuilderFactory::BUILDER_PRODUCTION],
                     [CliSource::OPTION_WITH_SELENIUM, true],
                     [CliSource::OPTION_WITH_CRON, true],
-                    [CliSource::OPTION_WITH_XDEBUG, true]
+                    [CliSource::OPTION_WITH_XDEBUG, true],
+                    [CliSource::OPTION_ES, '5.2'],
+                    [CliSource::OPTION_NO_ES, true],
+                    [CliSource::OPTION_DB_INCREMENT_INCREMENT, 3],
+                    [CliSource::OPTION_DB_INCREMENT_OFFSET, 2],
                 ]
             ]
         ];

@@ -7,38 +7,21 @@ declare(strict_types=1);
 
 namespace Magento\CloudDocker\Test\Functional\Acceptance;
 
+use Robo\Exception\TaskException;
+
 /**
  * @group php73
  */
-class AcceptanceCest
+class AcceptanceCest extends AbstractCest
 {
     /**
-     * Template version for testing
-     */
-    protected const TEMPLATE_VERSION = 'master';
-
-    /**
      * @param \CliTester $I
-     */
-    public function _before(\CliTester $I): void
-    {
-        $I->cleanupWorkDir();
-        $I->cloneTemplateToWorkDir(static::TEMPLATE_VERSION);
-        $I->createAuthJson();
-        $I->createArtifactsDir();
-        $I->createArtifactCurrentTestedCode('docker', '1.1.99');
-        $I->addArtifactsRepoToComposer();
-        $I->addDependencyToComposer('magento/magento-cloud-docker', '1.1.99');
-        $I->composerUpdate();
-    }
-
-    /**
-     * @param \CliTester $I
-     * @throws \Robo\Exception\TaskException
+     * @throws TaskException
      */
     public function testProductionMode(\CliTester $I): void
     {
         $I->runEceDockerCommand('build:compose --mode=production');
+        $I->replaceImagesWithGenerated();
         $I->startEnvironment();
         $I->runDockerComposeCommand('run build cloud-build');
         $I->runDockerComposeCommand('run deploy cloud-deploy');
@@ -50,7 +33,9 @@ class AcceptanceCest
 
     /**
      * @param \CliTester $I
-     * @throws \Robo\Exception\TaskException
+     * @throws TaskException
+     * @throws \Codeception\Exception\ModuleConfigException
+     * @throws \Codeception\Exception\ModuleException
      */
     public function testCustomHost(\CliTester $I): void
     {
@@ -59,6 +44,7 @@ class AcceptanceCest
             $I->runEceDockerCommand('build:compose --mode=production --host=magento2.test --port=8080'),
             'Command build:compose failed'
         );
+        $I->replaceImagesWithGenerated();
         $I->startEnvironment();
         $I->assertTrue($I->runDockerComposeCommand('run build cloud-build'), 'Build phase failed');
         $I->assertTrue($I->runDockerComposeCommand('run deploy cloud-deploy'), 'Deploy phase failed');
@@ -66,15 +52,5 @@ class AcceptanceCest
         $I->amOnPage('/');
         $I->see('Home page');
         $I->see('CMS homepage content goes here.');
-    }
-
-    /**
-     * @param \CliTester $I
-     */
-    public function _after(\CliTester $I): void
-    {
-        $I->stopEnvironment();
-        $I->removeDockerCompose();
-        $I->removeWorkDir();
     }
 }

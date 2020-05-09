@@ -8,9 +8,6 @@ declare(strict_types=1);
 namespace Magento\CloudDocker\Config\Source;
 
 use Illuminate\Config\Repository;
-use Magento\CloudDocker\Compose\BuilderFactory;
-use Magento\CloudDocker\Compose\DeveloperBuilder;
-use Magento\CloudDocker\Compose\ProductionBuilder;
 use Symfony\Component\Console\Input\InputInterface;
 
 /**
@@ -25,11 +22,15 @@ class CliSource implements SourceInterface
     public const OPTION_NGINX = 'nginx';
     public const OPTION_DB = 'db';
     public const OPTION_EXPOSE_DB_PORT = 'expose-db-port';
+    public const OPTION_EXPOSE_DB_QUOTE_PORT = 'expose-db-quote-port';
+    public const OPTION_EXPOSE_DB_SALES_PORT = 'expose-db-sales-port';
     public const OPTION_REDIS = 'redis';
     public const OPTION_ES = 'es';
     public const OPTION_RABBIT_MQ = 'rmq';
     public const OPTION_SELENIUM_VERSION = 'selenium-version';
     public const OPTION_SELENIUM_IMAGE = 'selenium-image';
+    public const OPTION_INSTALLATION_TYPE = 'installation-type';
+    public const OPTION_NO_ES = 'no-es';
 
     /**
      * State modifiers.
@@ -54,19 +55,40 @@ class CliSource implements SourceInterface
     public const OPTION_HOST = 'host';
     public const OPTION_PORT = 'port';
 
+    public const OPTION_DB_INCREMENT_INCREMENT = 'db-increment-increment';
+    public const OPTION_DB_INCREMENT_OFFSET = 'db-increment-offset';
+
     /**
-     * Option key to config name map
+     * Environment variable for elasticsearch service.
+     */
+    public const OPTION_ES_ENVIRONMENT_VARIABLE = 'es-env-var';
+
+    /**
+     * List of service enabling options
      *
      * @var array
      */
-    private static $optionsMap = [
-        self::OPTION_PHP => self::PHP,
-        self::OPTION_DB => self::SERVICES_DB,
-        self::OPTION_NGINX => self::SERVICES_NGINX,
-        self::OPTION_REDIS => self::SERVICES_REDIS,
-        self::OPTION_ES => self::SERVICES_ES,
-        self::OPTION_NODE => self::SERVICES_NODE,
-        self::OPTION_RABBIT_MQ => self::SERVICES_RMQ,
+    private static $enableOptionsMap = [
+        self::OPTION_PHP => [self::PHP],
+        self::OPTION_DB => [
+            self::SERVICES_DB,
+            self::SERVICES_DB_QUOTE,
+            self::SERVICES_DB_SALES
+        ],
+        self::OPTION_NGINX => [self::SERVICES_NGINX],
+        self::OPTION_REDIS => [self::SERVICES_REDIS],
+        self::OPTION_ES => [self::SERVICES_ES],
+        self::OPTION_NODE => [self::SERVICES_NODE],
+        self::OPTION_RABBIT_MQ => [self::SERVICES_RMQ],
+    ];
+
+    /**
+     * List of service disabling options
+     *
+     * @var array
+     */
+    private static $disableOptionsMap = [
+        self::OPTION_NO_ES => self::SERVICES_ES
     ];
 
     /**
@@ -87,6 +109,7 @@ class CliSource implements SourceInterface
      *
      * @SuppressWarnings(PHPMD.NPathComplexity)
      * @SuppressWarnings(PHPMD.CyclomaticComplexity)
+     * @SuppressWarnings(PHPMD.ExcessiveMethodLength)
      */
     public function read(): Repository
     {
@@ -104,11 +127,21 @@ class CliSource implements SourceInterface
             ]);
         }
 
-        foreach (self::$optionsMap as $option => $service) {
+        foreach (self::$enableOptionsMap as $option => $services) {
+            if ($value = $this->input->getOption($option)) {
+                foreach ($services as $service) {
+                    $repository->set([
+                        $service . '.enabled' => true,
+                        $service . '.version' => $value
+                    ]);
+                }
+            }
+        }
+
+        foreach (self::$disableOptionsMap as $option => $service) {
             if ($value = $this->input->getOption($option)) {
                 $repository->set([
-                    $service . '.enabled' => true,
-                    $service . '.version' => $value
+                    $service . '.enabled' => false
                 ]);
             }
         }
@@ -152,7 +185,7 @@ class CliSource implements SourceInterface
         }
 
         if ($envs = $this->input->getOption(self::OPTION_ENV_VARIABLES)) {
-            $repository->set(self::VARIABLES, (array) json_decode($envs, true));
+            $repository->set(self::VARIABLES, (array)json_decode($envs, true));
         }
 
         if ($dbPort = $this->input->getOption(self::OPTION_EXPOSE_DB_PORT)) {
@@ -160,11 +193,35 @@ class CliSource implements SourceInterface
         }
 
         if ($host = $this->input->getOption(self::OPTION_HOST)) {
-            $repository->set(self::CONFIG_HOST, $host);
+            $repository->set(self::SYSTEM_HOST, $host);
         }
 
         if ($port = $this->input->getOption(self::OPTION_PORT)) {
-            $repository->set(self::CONFIG_PORT, $port);
+            $repository->set(self::SYSTEM_PORT, $port);
+        }
+
+        if ($installationType = $this->input->getOption(self::OPTION_INSTALLATION_TYPE)) {
+            $repository->set(self::INSTALLATION_TYPE, $installationType);
+        }
+
+        if ($port = $this->input->getOption(self::OPTION_EXPOSE_DB_QUOTE_PORT)) {
+            $repository->set(self::SYSTEM_EXPOSE_DB_QUOTE_PORTS, $port);
+        }
+
+        if ($port = $this->input->getOption(self::OPTION_EXPOSE_DB_SALES_PORT)) {
+            $repository->set(self::SYSTEM_EXPOSE_DB_SALES_PORTS, $port);
+        }
+
+        if ($esEnvVars = $this->input->getOption(self::OPTION_ES_ENVIRONMENT_VARIABLE)) {
+            $repository->set(self::SERVICES_ES_VARS, $esEnvVars);
+        }
+
+        if ($incrementIncrement = $this->input->getOption(self::OPTION_DB_INCREMENT_INCREMENT)) {
+            $repository->set(SourceInterface::SYSTEM_DB_INCREMENT_INCREMENT, $incrementIncrement);
+        }
+
+        if ($incrementOffset = $this->input->getOption(self::OPTION_DB_INCREMENT_OFFSET)) {
+            $repository->set(SourceInterface::SYSTEM_DB_INCREMENT_OFFSET, $incrementOffset);
         }
 
         return $repository;

@@ -1,3 +1,4 @@
+os: linux
 dist: bionic
 
 git:
@@ -12,22 +13,17 @@ services:
   - docker
 
 language: php
-php:
-  - '7.1'
-  - '7.2'
-  - '7.3'
-
-env:
-  - TEST_SUITE=functional
 
 stages:
   - static-unit
   - integration
+  - build-images
   - test
 
 jobs:
   include:
     - stage: static-unit
+      php: '7.1'
       script: ./tests/travis/static-unit.sh;
       env:
         - TEST_SUITE=static-unit
@@ -41,6 +37,7 @@ jobs:
         - TEST_SUITE=static-unit
     - stage: integration
       script: ./vendor/bin/phpunit --configuration ./tests/integration;
+      php: '7.1'
       env:
         - TEST_SUITE=integration
     - script: ./vendor/bin/phpunit --configuration ./tests/integration;
@@ -51,9 +48,48 @@ jobs:
       php: '7.3'
       env:
         - TEST_SUITE=integration
+    - stage: build-images
+      env:
+        - TEST_SUITE=build-images
+      script:
+        - if [ $TRAVIS_SECURE_ENV_VARS == "true" ]; then ./tests/travis/images.sh tls; fi;
+        - if [ $TRAVIS_SECURE_ENV_VARS == "true" ]; then ./tests/travis/images.sh varnish; fi;
+        - if [ $TRAVIS_SECURE_ENV_VARS == "true" ]; then ./tests/travis/images.sh elasticsearch; fi;
+        - if [ $TRAVIS_SECURE_ENV_VARS == "true" ]; then ./tests/travis/images.sh nginx; fi;
+    - script:
+        - if [ $TRAVIS_SECURE_ENV_VARS == "true" ]; then ./tests/travis/images.sh php 7.1-cli; fi;
+        - if [ $TRAVIS_SECURE_ENV_VARS == "true" ]; then ./tests/travis/images.sh php 7.1-fpm; fi;
+      env:
+        - TEST_SUITE=build-images
+    - script:
+        - if [ $TRAVIS_SECURE_ENV_VARS == "true" ]; then ./tests/travis/images.sh php 7.2-cli; fi;
+        - if [ $TRAVIS_SECURE_ENV_VARS == "true" ]; then ./tests/travis/images.sh php 7.2-fpm; fi;
+      env:
+        - TEST_SUITE=build-images
+    - script:
+        - if [ $TRAVIS_SECURE_ENV_VARS == "true" ]; then ./tests/travis/images.sh php 7.3-cli; fi;
+        - if [ $TRAVIS_SECURE_ENV_VARS == "true" ]; then ./tests/travis/images.sh php 7.3-fpm; fi;
+      env:
+        - TEST_SUITE=build-images
+    - stage: test
+      php: '7.1'
+      dist: xenial
+      env:
+        - TEST_SUITE=functional
+    - php: '7.2'
+      dist: xenial
+      env:
+        - TEST_SUITE=functional
+    - php: '7.3'
+      env:
+        - TEST_SUITE=functional
 
-install: composer update
+install: if [[ $TEST_SUITE != "build-images" ]]; then composer update; fi;
+
+before_script:
+  - if [ $TRAVIS_SECURE_ENV_VARS == "true" ] && [ $TEST_SUITE == "build-images" ]; then echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin; fi;
+  - if [ $TEST_SUITE == "functional" ]; then sudo sysctl -w vm.max_map_count=262144; fi;
+  - if [ $TEST_SUITE == "functional" ]; then cp codeception.dist.yml codeception.yml && sed -i "s/use_generated_images:\ false/use_generated_images:\ true/" codeception.yml; fi;
 
 script:
   - if [ $TRAVIS_SECURE_ENV_VARS == "true" ] && [ $TEST_SUITE == "functional" ]; then ./tests/travis/functional.sh; fi;
-

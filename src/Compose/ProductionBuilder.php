@@ -178,12 +178,6 @@ class ProductionBuilder implements BuilderInterface
             $volumes[self::VOLUME_MAGENTO] = $this->getVolumeConfig();
         }
 
-        if ($config->getMode() === BuilderFactory::BUILDER_PRODUCTION) {
-            foreach ($volumes as $volumeName => $volume) {
-                $volumes[$volumeName] = [];
-            }
-        }
-
         $manager->setVolumes($volumes);
 
         $volumesBuild = $this->volumeResolver->normalize(array_merge(
@@ -220,6 +214,12 @@ class ProductionBuilder implements BuilderInterface
         if ($config->hasServiceEnabled(ServiceInterface::SERVICE_DB_SALES)) {
             $cliDepends = array_merge($cliDepends, [self::SERVICE_DB_SALES => ['condition' => 'service_started']]);
             $this->addDbService(self::SERVICE_DB_SALES, $manager, $dbVersion, $volumesMount, $config);
+        }
+
+        if ($config->getMode() === BuilderFactory::BUILDER_PRODUCTION) {
+            foreach ($volumes as $volumeName => $volume) {
+                $volumes[$volumeName] = [];
+            }
         }
 
         $esEnvVars = $config->get(SourceInterface::SERVICES_ES_VARS);

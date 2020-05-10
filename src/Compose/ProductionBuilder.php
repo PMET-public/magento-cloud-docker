@@ -219,7 +219,7 @@ class ProductionBuilder implements BuilderInterface
         if ($config->getMode() === BuilderFactory::BUILDER_PRODUCTION) {
             $managerVolumes = $manager->getVolumes();
             foreach ($managerVolumes as $volumeName => $volume) {
-                $volumes[$volumeName] = [];
+                $managerVolumes[$volumeName] = [];
             }
         }
 

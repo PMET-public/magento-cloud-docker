@@ -2,6 +2,7 @@
 FROM php:7.4-cli-buster
 ARG GOSU_VERSION=1.11
 
+ENV COMPOSER_MEMORY_LIMIT -1
 ENV PHP_MEMORY_LIMIT 2G
 ENV MAGENTO_ROOT /app
 ENV DEBUG false
@@ -33,6 +34,11 @@ RUN apt-get update \
   sudo \
   unzip \
   vim \
+  iputils-ping \
+  netcat \
+  less \
+  strace \
+  rsync \
   libbz2-dev \
   libjpeg62-turbo-dev \
   libpng-dev \

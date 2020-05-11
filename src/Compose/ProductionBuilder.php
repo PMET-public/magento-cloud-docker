@@ -221,7 +221,7 @@ class ProductionBuilder implements BuilderInterface
             foreach ($managerVolumes as $volumeName => $volume) {
                 $managerVolumes[$volumeName] = [];
             }
-            $manager->setVolumes($managerVolumes)
+            $manager->setVolumes($managerVolumes);
         }
 
         $esEnvVars = $config->get(SourceInterface::SERVICES_ES_VARS);

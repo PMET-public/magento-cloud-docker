@@ -39,6 +39,7 @@ RUN apt-get update \
   less \
   strace \
   rsync \
+  openssh-client \
   libbz2-dev \
   libjpeg62-turbo-dev \
   libpng-dev \

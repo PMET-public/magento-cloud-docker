@@ -58,6 +58,7 @@ class GeneratePhp extends Command
         'less',
         'strace',
         'rsync',
+        'openssh-client'
     ];
 
     private const PHP_EXTENSIONS_ENABLED_BY_DEFAULT = [

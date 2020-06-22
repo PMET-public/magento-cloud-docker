@@ -146,10 +146,6 @@ class ProductionBuilder implements BuilderInterface
 
         $volumes = [self::VOLUME_MAGENTO => $this->getVolumeConfig()];
 
-        if ($config->hasServiceEnabled(ServiceInterface::SERVICE_SELENIUM)) {
-            $manager->addVolume(self::VOLUME_MAGENTO_DEV, []);
-        }
-
         $mounts = $config->getMounts();
         $hasSelenium = $config->hasSelenium();
         $hasTmpMounts = $config->hasTmpMounts();
@@ -178,6 +174,10 @@ class ProductionBuilder implements BuilderInterface
             $volumes[self::VOLUME_MAGENTO] = $this->getVolumeConfig();
         }
 
+        if ($config->hasServiceEnabled(ServiceInterface::SERVICE_SELENIUM)) {
+            $volumes[self::VOLUME_MAGENTO_DEV] = $this->getVolumeConfig('/dev');
+        }
+
         $manager->setVolumes($volumes);
 
         $volumesBuild = $this->volumeResolver->normalize(array_merge(
@@ -204,16 +204,16 @@ class ProductionBuilder implements BuilderInterface
             $this->getVolumeConfig('/.docker/mysql/mariadb.conf.d')
         );
 
-        $this->addDbService(self::SERVICE_DB, $manager, $dbVersion, $volumesMount, $config);
+        $this->addDbService($manager, $config, self::SERVICE_DB, $dbVersion, $volumesMount);
 
         if ($config->hasServiceEnabled(ServiceInterface::SERVICE_DB_QUOTE)) {
             $cliDepends = array_merge($cliDepends, [self::SERVICE_DB_QUOTE => ['condition' => 'service_started']]);
-            $this->addDbService(self::SERVICE_DB_QUOTE, $manager, $dbVersion, $volumesMount, $config);
+            $this->addDbService($manager, $config, self::SERVICE_DB_QUOTE, $dbVersion, $volumesMount);
         }
 
         if ($config->hasServiceEnabled(ServiceInterface::SERVICE_DB_SALES)) {
             $cliDepends = array_merge($cliDepends, [self::SERVICE_DB_SALES => ['condition' => 'service_started']]);
-            $this->addDbService(self::SERVICE_DB_SALES, $manager, $dbVersion, $volumesMount, $config);
+            $this->addDbService($manager, $config, self::SERVICE_DB_SALES, $dbVersion, $volumesMount);
         }
 
         if ($config->getMode() === BuilderFactory::BUILDER_PRODUCTION) {
@@ -231,21 +231,30 @@ class ProductionBuilder implements BuilderInterface
                 continue;
             }
 
+            switch ($service) {
+                case self::SERVICE_REDIS:
+                    $serviceConfig = [self::SERVICE_HEALTHCHECK => [
+                        'test'=> 'redis-cli ping || exit 1',
+                        'interval'=> '30s',
+                        'timeout'=> '30s',
+                        'retries'=> 3
+                    ]];
+                    break;
+
+                case self::SERVICE_ELASTICSEARCH:
+                    $serviceConfig = !empty($esEnvVars) ? ['environment' => $esEnvVars] : [];
+                    break;
+
+                default:
+                    $serviceConfig = [];
+            }
+
             $manager->addService(
                 $service,
                 $this->serviceFactory->create(
                     (string)$service,
                     (string)$config->getServiceVersion($service),
-                    self::SERVICE_ELASTICSEARCH === $service && !empty($esEnvVars)
-                        ? ['environment' => $esEnvVars]
-                        : self::SERVICE_REDIS === $service
-                        ? [self::SERVICE_HEALTHCHECK => [
-                            'test'=> 'redis-cli ping || exit 1',
-                            'interval'=> '30s',
-                            'timeout'=> '30s',
-                            'retries'=> 3
-                        ] ]
-                        : []
+                    $serviceConfig
                 ),
                 [],
                 []
@@ -343,6 +352,27 @@ class ProductionBuilder implements BuilderInterface
                 ),
                 [],
                 $cliDepends
+            );
+        }
+
+        if ($config->hasServiceEnabled(ServiceInterface::SERVICE_BLACKFIRE)) {
+            $manager->addService(
+                ServiceInterface::SERVICE_BLACKFIRE,
+                $this->serviceFactory->create(
+                    ServiceInterface::SERVICE_BLACKFIRE,
+                    $config->getServiceVersion(ServiceInterface::SERVICE_BLACKFIRE),
+                    [
+                        'environment' => [
+                            'BLACKFIRE_SERVER_ID' => $config->getBlackfireConfig()['server_id'],
+                            'BLACKFIRE_SERVER_TOKEN' => $config->getBlackfireConfig()['server_token'],
+                            'BLACKFIRE_CLIENT_ID' => $config->getBlackfireConfig()['client_id'],
+                            'BLACKFIRE_CLIENT_TOKEN' => $config->getBlackfireConfig()['client_token']
+                        ],
+                        'ports' => ["8707"]
+                    ]
+                ),
+                [self::NETWORK_MAGENTO],
+                []
             );
         }
 
@@ -464,11 +494,11 @@ class ProductionBuilder implements BuilderInterface
      * @throws GenericException
      */
     private function addDbService(
-        string $service,
         Manager $manager,
+        Config $config,
+        string $service,
         string $version,
-        array $mounts,
-        Config $config
+        array $mounts
     ): void {
         $volumePrefix = $config->getNameWithPrefix();
         $mounts[] = $volumePrefix . self::VOLUME_MARIADB_CONF . ':/etc/mysql/mariadb.conf.d';
@@ -549,7 +579,8 @@ class ProductionBuilder implements BuilderInterface
             $this->serviceFactory->create(
                 $serviceType,
                 $version,
-                $dbConfig
+                $dbConfig,
+                $config->getServiceImage(ServiceInterface::SERVICE_DB)
             ),
             [],
             []

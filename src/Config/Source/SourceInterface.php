@@ -48,6 +48,7 @@ interface SourceInterface
      * DB
      */
     public const SERVICES_DB = self::SERVICES . '.' . ServiceInterface::SERVICE_DB;
+    public const SERVICES_DB_IMAGE = self::SERVICES_DB . '.image';
 
     /**
      * DB quote
@@ -88,6 +89,15 @@ interface SourceInterface
      * Rabbit MQ
      */
     public const SERVICES_RMQ = self::SERVICES . '.' . ServiceInterface::SERVICE_RABBITMQ;
+
+    /**
+     * Blackfire
+     */
+    public const SERVICES_BLACKFIRE = self::SERVICES . '.' . ServiceInterface::SERVICE_BLACKFIRE;
+    public const SERVICES_BLACKFIRE_VERSION = self::SERVICES_BLACKFIRE . '.version';
+    public const SERVICES_BLACKFIRE_IMAGE = self::SERVICES_BLACKFIRE . '.image';
+    public const SERVICES_BLACKFIRE_ENABLED = self::SERVICES_BLACKFIRE . '.enabled';
+    public const SERVICES_BLACKFIRE_CONFIG = self::SERVICES_BLACKFIRE . '.config';
 
     /**
      * PHP Xdebug

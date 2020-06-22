@@ -40,6 +40,8 @@ if [ ! -z "${CRONTAB}" ]; then
     service rsyslog start
 fi
 
+touch $CRON_LOG
+
 PHP_EXT_DIR=/usr/local/etc/php/conf.d
 
 # Configure Sendmail if required

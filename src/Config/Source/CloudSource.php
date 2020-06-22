@@ -174,7 +174,9 @@ class CloudSource implements SourceInterface
                     continue;
                 }
 
-                if ($repository->has(self::SERVICES . '.' . $service) && $service != ServiceInterface::SERVICE_DB) {
+                if ($service !== ServiceInterface::SERVICE_DB
+                    && $repository->has(self::SERVICES . '.' . $service)
+                ) {
                     throw new SourceException(sprintf(
                         'Only one instance of service "%s" supported',
                         $service
@@ -185,9 +187,7 @@ class CloudSource implements SourceInterface
                     $repository->set([
                         self::SERVICES . '.' . $service . '.enabled' => true,
                         self::SERVICES . '.' . $service . '.version' => $version,
-                        self::SERVICES . '.' . $service . '.image' => $this->serviceFactory->getDefaultImage(
-                            $service
-                        )
+                        self::SERVICES . '.' . $service . '.image' => $this->serviceFactory->getDefaultImage($service)
                     ]);
                 } catch (ConfigurationMismatchException $exception) {
                     throw new SourceException($exception->getMessage(), $exception->getCode(), $exception);
@@ -204,6 +204,7 @@ class CloudSource implements SourceInterface
      * @param array $extensions
      * @param array $disabledExtensions
      * @return Repository
+     * @throws ConfigurationMismatchException
      */
     private function addPhp(
         Repository $repository,
@@ -217,6 +218,23 @@ class CloudSource implements SourceInterface
         ]);
 
         if ($extensions) {
+            /* Parse nested Blackfire configuration */
+            foreach ($extensions as $key => $phpExtension) {
+                if (is_array($phpExtension) && $phpExtension["name"] === ServiceInterface::SERVICE_BLACKFIRE) {
+                    /* Store extension data in repository */
+                    $repository->set([
+                        self::SERVICES_BLACKFIRE_ENABLED => true,
+                        self::SERVICES_BLACKFIRE_VERSION =>
+                                $this->serviceFactory->getDefaultVersion(ServiceInterface::SERVICE_BLACKFIRE),
+                        self::SERVICES_BLACKFIRE_IMAGE =>
+                                $this->serviceFactory->getDefaultImage(ServiceInterface::SERVICE_BLACKFIRE),
+                        self::SERVICES_BLACKFIRE_CONFIG => $phpExtension["configuration"]
+                    ]);
+                    /* Reset nested extension data with extension name */
+                    $extensions[$key] = ServiceInterface::SERVICE_BLACKFIRE;
+                }
+            }
+
             $repository[self::PHP_ENABLED_EXTENSIONS] = $extensions;
         }
 

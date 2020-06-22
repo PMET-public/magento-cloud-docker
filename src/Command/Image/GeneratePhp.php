@@ -24,7 +24,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 class GeneratePhp extends Command
 {
     private const NAME = 'image:generate:php';
-    private const SUPPORTED_VERSIONS = ['7.1', '7.2', '7.3', '7.4'];
+    private const SUPPORTED_VERSIONS = ['7.2', '7.3', '7.4'];
 
     private const EDITION_CLI = 'cli';
     private const EDITION_FPM = 'fpm';
@@ -47,7 +47,6 @@ class GeneratePhp extends Command
         'python3',
         'python3-pip',
         'redis-tools',
-        'rsyslog',
         'sendmail',
         'sendmail-bin',
         'sudo',
@@ -58,7 +57,7 @@ class GeneratePhp extends Command
         'less',
         'strace',
         'rsync',
-        'openssh-client'
+        'openssh-client',
     ];
 
     private const PHP_EXTENSIONS_ENABLED_BY_DEFAULT = [

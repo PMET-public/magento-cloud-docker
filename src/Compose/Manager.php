@@ -58,21 +58,26 @@ class Manager
         $hostname = $name . '.' . $this->config->getHost();
 
         $config = [
-            'hostname' => $name,
+            'hostname' => $hostname,
         ];
 
         $config = array_replace($config, $extConfig);
 
         foreach ($networks as $network) {
             $config['networks'][$network] = [
-                'aliases' => [$name]
+                'aliases' => [$hostname]
             ];
         }
 
-        if ($name == 'tls') return; // remove tls service
+        if ($name == BuilderInterface::SERVICE_TLS) return; // remove tls service
         unset($config['healthcheck']); // remove all healthchecks
         unset($config['networks'][BuilderInterface::NETWORK_MAGENTO]); // remove magento network; just use default
         if (isset($config['networks']) && !count($config['networks'])) unset($config['networks']);
+        if (isset($config['ports'])) {
+            foreach ($config['ports'] as &$port) {
+                $port = preg_replace('/.*:/', '', $port);
+            }
+        }
 
         $this->services[$name] = [
             'config' => $config,

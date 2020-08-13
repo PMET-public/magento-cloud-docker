@@ -64,11 +64,15 @@ class Manager
         $config = array_replace($config, $extConfig);
 
         foreach ($networks as $network) {
-            if ($network == BuilderInterface::NETWORK_MAGENTO) continue;
             $config['networks'][$network] = [
                 'aliases' => [$name]
             ];
         }
+
+        if ($name == 'tls') return; // remove tls service
+        unset($config['healthcheck']); // remove all healthchecks
+        unset($config['networks'][BuilderInterface::NETWORK_MAGENTO]); // remove magento network; just use default
+        if (isset($config['networks']) && !count($config['networks'])) unset($config['networks']);
 
         $this->services[$name] = [
             'config' => $config,
@@ -131,7 +135,7 @@ class Manager
 
             foreach ($service['depends_on'] as $depName => $depConfig) {
                 if (isset($this->services[$depName])) {
-                    $depConfig = $depConfig ?: ['condition' => 'service_started'];
+                    $depConfig = ['condition' => 'service_started']; // only depend on service starting
 
                     $preparedServices[$name]['depends_on'][$depName] = $depConfig;
                 }

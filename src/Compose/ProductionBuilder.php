@@ -278,7 +278,7 @@ class ProductionBuilder implements BuilderInterface
                         'WITH_XDEBUG=' . (int)$config->hasServiceEnabled(ServiceInterface::SERVICE_FPM_XDEBUG)
                     ],
                     'ports' => [
-                        '80'
+                        '80' // don't bind system's port 80 and prevent multiple instances
                     ]
                 ]
             ),

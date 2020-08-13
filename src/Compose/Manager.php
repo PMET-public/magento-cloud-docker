@@ -64,6 +64,7 @@ class Manager
         $config = array_replace($config, $extConfig);
 
         foreach ($networks as $network) {
+            if ($network == BuilderInterface::NETWORK_MAGENTO) continue;
             $config['networks'][$network] = [
                 'aliases' => [$name]
             ];

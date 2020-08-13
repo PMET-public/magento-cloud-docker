@@ -142,6 +142,7 @@ class ProductionBuilder implements BuilderInterface
         $dbVersion = $config->getServiceVersion(ServiceInterface::SERVICE_DB);
         $cliDepends = self::$cliDepends;
 
+        // $manager->addNetwork(self::NETWORK_MAGENTO, ['driver' => 'bridge']);
         $manager->addNetwork(self::NETWORK_MAGENTO_BUILD, ['driver' => 'bridge']);
 
         $volumes = [self::VOLUME_MAGENTO => $this->getVolumeConfig()];
@@ -218,6 +219,7 @@ class ProductionBuilder implements BuilderInterface
             $this->addDbService($manager, $config, self::SERVICE_DB_SALES, $dbVersion, $volumesMount);
         }
 
+        // bypass bind mounted volumes
         if ($config->getMode() === BuilderFactory::BUILDER_PRODUCTION) {
             $managerVolumes = $manager->getVolumes();
             foreach ($managerVolumes as $volumeName => $volume) {
@@ -238,7 +240,7 @@ class ProductionBuilder implements BuilderInterface
                     (string)$config->getServiceVersion($service),
                     $this->getServiceConfig($service, $config)
                 ),
-                [],
+                [self::NETWORK_MAGENTO],
                 []
             );
         }
@@ -251,7 +253,7 @@ class ProductionBuilder implements BuilderInterface
                     $config->getServiceVersion(ServiceInterface::SERVICE_NODE),
                     ['volumes' => $volumesRo]
                 ),
-                [],
+                [self::NETWORK_MAGENTO],
                 []
             );
         }
@@ -259,7 +261,7 @@ class ProductionBuilder implements BuilderInterface
         $manager->addService(
             self::SERVICE_FPM,
             $this->serviceFactory->create(ServiceInterface::SERVICE_PHP_FPM, $phpVersion, ['volumes' => $volumesRo]),
-            [],
+            [self::NETWORK_MAGENTO],
             [self::SERVICE_DB => ['condition' => 'service_healthy']]
         );
         $manager->addService(
@@ -280,7 +282,7 @@ class ProductionBuilder implements BuilderInterface
                     ]
                 ]
             ),
-            [],
+            [self::NETWORK_MAGENTO],
             [self::SERVICE_FPM => []]
         );
 
@@ -290,7 +292,13 @@ class ProductionBuilder implements BuilderInterface
                 $this->serviceFactory->create(
                     ServiceInterface::SERVICE_VARNISH,
                     $config->getServiceVersion(ServiceInterface::SERVICE_VARNISH),
-                    []
+                    [
+                        'networks' => [
+                            self::NETWORK_MAGENTO => [
+                                'aliases' => [$config->getHost()]
+                            ]
+                        ]
+                    ]
                 ),
                 [],
                 [self::SERVICE_WEB => ['condition' => 'service_healthy']]
@@ -309,7 +317,7 @@ class ProductionBuilder implements BuilderInterface
                     'environment' => ['HTTPS_UPSTREAM_SERVER_ADDRESS' => $tlsBackendService],
                 ]
             ),
-            [],
+            [self::NETWORK_MAGENTO],
             [$tlsBackendService => []]
         );
 
@@ -322,7 +330,7 @@ class ProductionBuilder implements BuilderInterface
                     [],
                     $config->getServiceImage(ServiceInterface::SERVICE_SELENIUM)
                 ),
-                [],
+                [self::NETWORK_MAGENTO],
                 [self::SERVICE_WEB => []]
             );
             $manager->addService(
@@ -332,7 +340,7 @@ class ProductionBuilder implements BuilderInterface
                     $phpVersion,
                     ['volumes' => $volumesRw]
                 ),
-                [],
+                [self::NETWORK_MAGENTO],
                 $cliDepends
             );
         }
@@ -374,7 +382,7 @@ class ProductionBuilder implements BuilderInterface
                         'environment' => $this->converter->convert(['PHP_EXTENSIONS' => implode(' ', $phpExtensions)])
                     ]
                 ),
-                [],
+                [self::NETWORK_MAGENTO],
                 [self::SERVICE_DB => []]
             );
         }
@@ -408,7 +416,7 @@ class ProductionBuilder implements BuilderInterface
         $manager->addService(
             self::SERVICE_DEPLOY,
             $this->serviceFactory->create(ServiceInterface::SERVICE_PHP_CLI, $phpVersion, ['volumes' => $volumesRo]),
-            [],
+            [self::NETWORK_MAGENTO],
             self::$cliDepends
         );
 
@@ -419,7 +427,7 @@ class ProductionBuilder implements BuilderInterface
                     $this->getCronCliService($config),
                     ['volumes' => $volumesRo]
                 ),
-                [],
+                [self::NETWORK_MAGENTO],
                 $cliDepends
             );
         }
@@ -585,7 +593,7 @@ class ProductionBuilder implements BuilderInterface
                 $dbConfig,
                 $config->getServiceImage(ServiceInterface::SERVICE_DB)
             ),
-            [],
+            [self::NETWORK_MAGENTO],
             []
         );
     }

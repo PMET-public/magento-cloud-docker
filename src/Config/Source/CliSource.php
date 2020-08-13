@@ -44,6 +44,8 @@ class CliSource implements SourceInterface
     public const OPTION_NO_TMP_MOUNTS = 'no-tmp-mounts';
     public const OPTION_SYNC_ENGINE = 'sync-engine';
     public const OPTION_WITH_XDEBUG = 'with-xdebug';
+    public const OPTION_WITH_ENTRYPOINT = 'with-entrypoint';
+    public const OPTION_WITH_MARIADB_CONF = 'with-mariadb-conf';
 
     /**
      * Environment variables.
@@ -70,17 +72,29 @@ class CliSource implements SourceInterface
      * @var array
      */
     private static $enableOptionsMap = [
-        self::OPTION_PHP => [self::PHP],
-        self::OPTION_DB => [
-            self::SERVICES_DB,
-            self::SERVICES_DB_QUOTE,
-            self::SERVICES_DB_SALES
+        self::OPTION_PHP => [
+            self::PHP => true
         ],
-        self::OPTION_NGINX => [self::SERVICES_NGINX],
-        self::OPTION_REDIS => [self::SERVICES_REDIS],
-        self::OPTION_ES => [self::SERVICES_ES],
-        self::OPTION_NODE => [self::SERVICES_NODE],
-        self::OPTION_RABBIT_MQ => [self::SERVICES_RMQ],
+        self::OPTION_DB => [
+            self::SERVICES_DB => true,
+            self::SERVICES_DB_QUOTE => false,
+            self::SERVICES_DB_SALES => false
+        ],
+        self::OPTION_NGINX => [
+            self::SERVICES_NGINX => true
+        ],
+        self::OPTION_REDIS => [
+            self::SERVICES_REDIS => true
+        ],
+        self::OPTION_ES => [
+            self::SERVICES_ES => true
+        ],
+        self::OPTION_NODE => [
+            self::SERVICES_NODE => true
+        ],
+        self::OPTION_RABBIT_MQ => [
+            self::SERVICES_RMQ => true
+        ],
     ];
 
     /**
@@ -128,13 +142,25 @@ class CliSource implements SourceInterface
             ]);
         }
 
+        /**
+         * Loop through options to enable services.
+         * Each option may have one or more dependencies.
+         *
+         * The dependencies must be in sync.
+         * The dependencies which does not change status, must keep their default status.
+         */
         foreach (self::$enableOptionsMap as $option => $services) {
             if ($value = $this->input->getOption($option)) {
-                foreach ($services as $service) {
+                foreach ($services as $service => $status) {
                     $repository->set([
-                        $service . '.enabled' => true,
                         $service . '.version' => $value
                     ]);
+
+                    if ($status === true) {
+                        $repository->set([
+                            $service . '.enabled' => true
+                        ]);
+                    }
                 }
             }
         }
@@ -229,6 +255,14 @@ class CliSource implements SourceInterface
 
         if ($incrementOffset = $this->input->getOption(self::OPTION_DB_INCREMENT_OFFSET)) {
             $repository->set(SourceInterface::SYSTEM_DB_INCREMENT_OFFSET, $incrementOffset);
+        }
+
+        if ($this->input->getOption(self::OPTION_WITH_ENTRYPOINT)) {
+            $repository->set(SourceInterface::SYSTEM_DB_ENTRYPOINT, true);
+        }
+
+        if ($this->input->getOption(self::OPTION_WITH_MARIADB_CONF)) {
+            $repository->set(SourceInterface::SYSTEM_MARIADB_CONF, true);
         }
 
         return $repository;

@@ -199,10 +199,12 @@ class ProductionBuilder implements BuilderInterface
 
         $volumePrefix = $config->getNameWithPrefix();
 
-        $manager->addVolume(
-            $volumePrefix . self::VOLUME_MARIADB_CONF,
-            $this->getVolumeConfig('/.docker/mysql/mariadb.conf.d')
-        );
+        if ($config->hasMariaDbConf()) {
+            $manager->addVolume(
+                $volumePrefix . self::VOLUME_MARIADB_CONF,
+                $this->getVolumeConfig('/.docker/mysql/mariadb.conf.d')
+            );
+        }
 
         $this->addDbService($manager, $config, self::SERVICE_DB, $dbVersion, $volumesMount);
 
@@ -224,29 +226,9 @@ class ProductionBuilder implements BuilderInterface
             $manager->setVolumes($managerVolumes);
         }
 
-        $esEnvVars = $config->get(SourceInterface::SERVICES_ES_VARS);
-
         foreach (self::$standaloneServices as $service) {
             if (!$config->hasServiceEnabled($service)) {
                 continue;
-            }
-
-            switch ($service) {
-                case self::SERVICE_REDIS:
-                    $serviceConfig = [self::SERVICE_HEALTHCHECK => [
-                        'test'=> 'redis-cli ping || exit 1',
-                        'interval'=> '30s',
-                        'timeout'=> '30s',
-                        'retries'=> 3
-                    ]];
-                    break;
-
-                case self::SERVICE_ELASTICSEARCH:
-                    $serviceConfig = !empty($esEnvVars) ? ['environment' => $esEnvVars] : [];
-                    break;
-
-                default:
-                    $serviceConfig = [];
             }
 
             $manager->addService(
@@ -254,7 +236,7 @@ class ProductionBuilder implements BuilderInterface
                 $this->serviceFactory->create(
                     (string)$service,
                     (string)$config->getServiceVersion($service),
-                    $serviceConfig
+                    $this->getServiceConfig($service, $config)
                 ),
                 [],
                 []
@@ -442,6 +424,16 @@ class ProductionBuilder implements BuilderInterface
             );
         }
 
+        $manager->addService(
+            self::SERVICE_MAILHOG,
+            $this->serviceFactory->create(
+                ServiceInterface::SERVICE_MAILHOG,
+                $this->serviceFactory->getDefaultVersion(ServiceInterface::SERVICE_MAILHOG)
+            ),
+            [self::NETWORK_MAGENTO],
+            []
+        );
+
         return $manager;
     }
 
@@ -492,6 +484,9 @@ class ProductionBuilder implements BuilderInterface
      * @param Config $config
      * @throws ConfigurationMismatchException
      * @throws GenericException
+     *
+     * @SuppressWarnings(PHPMD.CyclomaticComplexity)
+     * @SuppressWarnings(PHPMD.ExcessiveMethodLength)
      */
     private function addDbService(
         Manager $manager,
@@ -501,7 +496,11 @@ class ProductionBuilder implements BuilderInterface
         array $mounts
     ): void {
         $volumePrefix = $config->getNameWithPrefix();
-        $mounts[] = $volumePrefix . self::VOLUME_MARIADB_CONF . ':/etc/mysql/mariadb.conf.d';
+
+        if ($config->hasMariaDbConf()) {
+            $mounts[] = $volumePrefix . self::VOLUME_MARIADB_CONF . ':/etc/mysql/mariadb.conf.d';
+        }
+
         $commands = [];
 
         switch ($service) {
@@ -509,13 +508,17 @@ class ProductionBuilder implements BuilderInterface
                 $port = $config->getDbPortsExpose();
 
                 $manager->addVolume($volumePrefix . self::VOLUME_MAGENTO_DB, []);
-                $manager->addVolume(
-                    self::VOLUME_DOCKER_ETRYPOINT,
-                    $this->getVolumeConfig('/.docker/mysql/docker-entrypoint-initdb.d')
-                );
 
                 $mounts[] = $volumePrefix . self::VOLUME_MAGENTO_DB . ':/var/lib/mysql';
-                $mounts[] = self::VOLUME_DOCKER_ETRYPOINT . ':/docker-entrypoint-initdb.d';
+
+                if ($config->hasDbEntrypoint()) {
+                    $manager->addVolume(
+                        self::VOLUME_DOCKER_ETRYPOINT,
+                        $this->getVolumeConfig('/.docker/mysql/docker-entrypoint-initdb.d')
+                    );
+                    $mounts[] = self::VOLUME_DOCKER_ETRYPOINT . ':/docker-entrypoint-initdb.d';
+                }
+
                 $serviceType = ServiceInterface::SERVICE_DB;
 
                 if ($config->getDbIncrementIncrement() > 1) {
@@ -562,11 +565,11 @@ class ProductionBuilder implements BuilderInterface
         $dbConfig = [
             'ports' => [$port ? "$port:3306" : '3306'],
             'volumes' => $mounts,
-             self::SERVICE_HEALTHCHECK => [
-                'test'=> 'mysqladmin ping -h localhost',
-                'interval'=> '30s',
-                'timeout'=> '30s',
-                'retries'=> 3
+            self::SERVICE_HEALTHCHECK => [
+                'test' => 'mysqladmin ping -h localhost',
+                'interval' => '30s',
+                'timeout' => '30s',
+                'retries' => 3
             ],
         ];
 
@@ -585,6 +588,38 @@ class ProductionBuilder implements BuilderInterface
             [],
             []
         );
+    }
+
+    /**
+     * @param string $service
+     * @param Config $config
+     * @return array
+     * @throws ConfigurationMismatchException
+     */
+    private function getServiceConfig(string $service, Config $config): array
+    {
+        switch ($service) {
+            case self::SERVICE_REDIS:
+                $serviceConfig = [
+                    self::SERVICE_HEALTHCHECK => [
+                        'test' => 'redis-cli ping || exit 1',
+                        'interval' => '30s',
+                        'timeout' => '30s',
+                        'retries' => 3
+                    ]
+                ];
+                break;
+
+            case self::SERVICE_ELASTICSEARCH:
+                $esEnvVars = $config->get(SourceInterface::SERVICES_ES_VARS);
+                $serviceConfig = !empty($esEnvVars) ? ['environment' => $esEnvVars] : [];
+                break;
+
+            default:
+                $serviceConfig = [];
+        }
+
+        return $serviceConfig;
     }
 
     /**

@@ -23,6 +23,8 @@ fi
 
 echo "Installing dependencies."
 
+composer global require hirak/prestissimo --no-interaction # parallelize downloads (much faster)
+
 composer --working-dir=$MAGENTO_ROOT install --no-suggest --no-ansi --no-interaction --no-progress --prefer-dist
 
 echo "Running \"build\" hook."

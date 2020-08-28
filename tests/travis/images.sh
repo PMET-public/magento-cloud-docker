@@ -16,8 +16,8 @@ function run() {
     service_name="$1"
     service_version="$2"
 
-    if [[ $service_name == "tls" ]]; then
-        build_push_image "cloudft/tls" "latest-$TRAVIS_BUILD_NUMBER" "./images/tls"
+    if [[ $service_name == "nginx" ]]; then
+        build_push_image "cloudft/nginx" "latest-$TRAVIS_BUILD_NUMBER" "./images/web"
     else
         if [[ "$service_version" != "" ]]; then
             build_push_image "cloudft/$service_name" "$service_version-$TRAVIS_BUILD_NUMBER" "./images/$service_name/$service_version"
@@ -25,7 +25,7 @@ function run() {
             latest_version=""
             for service_version in $(ls -1 "./images/$service_name" | sort --version-sort)
             do
-                if [[ $service_version == "cli" ]] || [[ $service_version == "fpm" ]]; then continue; fi;
+                if [[ $service_version == "cli" ]] || [[ $service_version == "fpm" ]] || [[ $service_version == "es" ]]; then continue; fi;
                 build_push_image "cloudft/$service_name" "$service_version-$TRAVIS_BUILD_NUMBER" "./images/$service_name/$service_version"
                 latest_version="$service_version"
             done

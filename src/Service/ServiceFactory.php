@@ -74,9 +74,6 @@ class ServiceFactory
             'pattern' => self::PATTERN_VERSIONED,
             'config' => [
                 'extends' => ServiceInterface::SERVICE_GENERIC,
-                'ports' => [
-                    '80:80'
-                ],
             ]
         ],
         ServiceInterface::SERVICE_VARNISH => [
@@ -85,13 +82,11 @@ class ServiceFactory
             'pattern' => self::PATTERN_VERSIONED,
         ],
         ServiceInterface::SERVICE_TLS => [
-            'image' => 'magento/magento-cloud-docker-tls',
+            'image' => 'magento/magento-cloud-docker-nginx',
             'version' => 'latest',
             'pattern' => self::PATTERN_VERSIONED,
             'config' => [
-                'ports' => [
-                    '443:443'
-                ],
+                'extends' => ServiceInterface::SERVICE_GENERIC,
             ]
         ],
         ServiceInterface::SERVICE_REDIS => [

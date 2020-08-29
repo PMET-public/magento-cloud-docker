@@ -145,7 +145,6 @@ class ProductionBuilder implements BuilderInterface
 
         $hasGenerated = !version_compare($config->getMagentoVersion(), '2.2.0', '<');
         $volumes = [];
-        //$volumes = [self::VOLUME_MAGENTO => $this->getVolumeConfig()];
 
         foreach (array_keys($this->volumeResolver->getMagentoVolumes(
             $mounts,
@@ -190,15 +189,6 @@ class ProductionBuilder implements BuilderInterface
             $cliDepends = array_merge($cliDepends, [self::SERVICE_DB_SALES => ['condition' => 'service_started']]);
             $this->addDbService($manager, $config, self::SERVICE_DB_SALES, $dbVersion, $volumesMount);
         }
-
-        // // bypass bind mounted volumes
-        // if ($config->getMode() === BuilderFactory::BUILDER_PRODUCTION) {
-        //     $managerVolumes = $manager->getVolumes();
-        //     foreach ($managerVolumes as $volumeName => $volume) {
-        //         $managerVolumes[$volumeName] = [];
-        //     }
-        //     $manager->setVolumes($managerVolumes);
-        // }
 
         foreach (self::$standaloneServices as $service) {
             if (!$config->hasServiceEnabled($service)) {
@@ -600,19 +590,4 @@ class ProductionBuilder implements BuilderInterface
 
         return $serviceConfig;
     }
-
-    // /**
-    //  * @param string $device
-    //  * @return array
-    //  */
-    // private function getVolumeConfig(string $device = '/'): array
-    // {
-    //     return [
-    //         'driver_opts' => [
-    //             'type' => 'none',
-    //             'device' => $this->resolver->getRootPath($device),
-    //             'o' => 'bind'
-    //         ]
-    //     ];
-    // }
 }

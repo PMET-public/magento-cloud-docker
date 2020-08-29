@@ -12,7 +12,7 @@
       "port": 9000,
       "stopOnEntry": true,
       "pathMappings": {
-          "${env:HOME}/Documents/ese/mc/ref1.the1umastory.com/vendor/magento/magento-cloud-docker": "${workspaceRoot}"
+          "${env:HOME}/Documents/ese/mc/magento-cloud/vendor/magento/magento-cloud-docker": "${workspaceRoot}"
       }
     },
     {

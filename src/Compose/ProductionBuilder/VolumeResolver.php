@@ -147,7 +147,7 @@ class VolumeResolver
                 '%s:%s:%s',
                 $name,
                 $config['path'],
-                $config['mode'] ?? 'rw,delegated'
+                'rw,delegated' // khb: always rw & delegate is n/a // $config['mode'] ?? 'rw,delegated'
             );
         }
 

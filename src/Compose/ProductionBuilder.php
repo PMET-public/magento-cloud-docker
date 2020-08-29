@@ -155,6 +155,14 @@ class ProductionBuilder implements BuilderInterface
         }
 
         $manager->setVolumes($volumes);
+        // add named volumes to replace bind mounted ones
+        $manager->addVolume(self::VOLUME_MAGENTO, []);
+        $manager->addVolume(self::VOLUME_DOCKER_MNT, []);
+        $manager->addVolume(self::VOLUME_MARIADB_CONF, []);
+        $manager->addVolume(self::VOLUME_MAGENTO_DEV, []);
+        $manager->addVolume(self::VOLUME_DOCKER_ETRYPOINT, []);
+        $manager->addVolume(self::VOLUME_DOCKER_ETRYPOINT_QUOTE, []);
+        $manager->addVolume(self::VOLUME_DOCKER_ETRYPOINT_SALES, []);
 
         $volumesBuild = $this->volumeResolver->normalize(array_merge(
             $this->volumeResolver->getRootVolume(false),

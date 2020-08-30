@@ -19,9 +19,14 @@ if [ "$MAGENTO_RUN_MODE" == "production" ]; then
 
     echo "Cleaning generated directory."
     rm -rf $MAGENTO_ROOT/generated/*
+
+    echo "Removing app/etc/env.php file"
+    rm -f  $MAGENTO_ROOT/app/etc/env.php
 fi
 
 echo "Installing dependencies."
+
+composer global require hirak/prestissimo --no-interaction # parallelize downloads (much faster)
 
 composer --working-dir=$MAGENTO_ROOT install --no-suggest --no-ansi --no-interaction --no-progress --prefer-dist
 

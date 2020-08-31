@@ -21,7 +21,7 @@ mcd_images=(
 mcd_docker_build() {
   local image
   for image in "${mcd_images[@]}"; do
-    pushd "mcd_images/$image"
+    pushd "images/$image"
     tag="pmetpublic/magento-cloud-docker-${image/\//:}-$composer_major_minor_ver-$git_short_ver"
     docker build . --tag "$tag" > "docker-build-$tag.log"
     popd

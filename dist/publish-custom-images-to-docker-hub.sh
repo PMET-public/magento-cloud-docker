@@ -4,7 +4,7 @@ set -xe
 
 git_short_ver="$(git rev-parse --short HEAD)"
 composer_major_minor_ver="$(perl -0777 -ne '/version"\s*:\s*"([^"]+)\./ and print $1' composer.json)"
-images=(
+mcd_images=(
   "elasticsearch/6.5"
   "elasticsearch/6.8"
   "elasticsearch/7.5"
@@ -18,15 +18,20 @@ images=(
   "web"
 )
 
-for image in "${images[@]}"; do
-  pushd "images/$image"
-  tag="pmetpublic/magento-cloud-docker-${image/\//:}-$composer_major_minor_ver-$git_short_ver"
-  docker build . --tag "$tag" > "docker-build-$tag.log"
-  popd
-done
+mcd_docker_build() {
+  local image
+  for image in "${mcd_images[@]}"; do
+    pushd "mcd_images/$image"
+    tag="pmetpublic/magento-cloud-docker-${image/\//:}-$composer_major_minor_ver-$git_short_ver"
+    docker build . --tag "$tag" > "docker-build-$tag.log"
+    popd
+  done
+}
 
-# only push if all successfully built
-for image in "${images[@]}"; do
-  tag="pmetpublic/magento-cloud-docker-${image/\//:}-$composer_major_minor_ver-$git_short_ver"
-  docker push "$tag"
-done
+mcd_docker_publish() {
+  local image
+  for image in "${mcd_images[@]}"; do
+    tag="pmetpublic/magento-cloud-docker-${image/\//:}-$composer_major_minor_ver-$git_short_ver"
+    docker push "$tag"
+  done
+}

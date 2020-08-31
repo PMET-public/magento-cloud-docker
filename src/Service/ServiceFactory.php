@@ -185,10 +185,15 @@ class ServiceFactory
         preg_match('/^\d+\.\d+/', $mcdVersion, $matches);
 
         $image = $image ?: $metaConfig['image'];
+        $image = str_replace('magento/', 'pmetpublic/', $image);
+        $hashSuffix = '-'.exec('cd vendor/magento/magento-cloud-docker && git rev-parse --short HEAD', $output, $return_var);
+        if ($return_var !== 0) {
+            throw new ConfigurationMismatchException('Could not find dir or commit hash.');
+        }
         $pattern = $metaConfig['pattern'];
 
         return array_replace(
-            ['image' => sprintf($pattern, $image, $version, $matches[0])],
+            ['image' => sprintf($pattern, $image, $version, $matches[0]).(preg_match('/^pmetpublic\//', $image) ? $hashSuffix : '')],
             $defaultConfig,
             $config
         );

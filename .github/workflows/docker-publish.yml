@@ -42,6 +42,7 @@ jobs:
         run: |
           export OVERRIDE_MCD_IMAGE_VERSION="$(git rev-parse --short HEAD)"
           cd mc/mdm
+          export MDM_REPO_DIR="$PWD"
           ./tests/libs/bats/bin/bats -T ./tests/dockerize-then-run-magento-app/all/1-install-mdm-and-create-magento-app.bats
       
       # publish

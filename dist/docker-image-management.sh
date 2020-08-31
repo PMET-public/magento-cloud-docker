@@ -23,7 +23,7 @@ mcd_docker_build() {
   for image in "${mcd_images[@]}"; do
     pushd "images/$image"
     tag="pmetpublic/magento-cloud-docker-${image/\//:}-$composer_major_minor_ver-$git_short_ver"
-    docker build . --tag "$tag" > "docker-build-$tag.log"
+    docker build . --tag "$tag" > "docker-build-${image/\//-}-$composer_major_minor_ver-$git_short_ver.log"
     popd
   done
 }

@@ -21,7 +21,7 @@ images=(
 for image in "${images[@]}"; do
   pushd "images/$image"
   tag="pmetpublic/magento-cloud-docker-${image/\//:}-$composer_major_minor_ver-$git_short_ver"
-  docker build "$image" --tag "$tag"
+  docker build . --tag "$tag"
   popd
 done
 

@@ -14,17 +14,24 @@ mcd_images=(
   "php/7.3-fpm"
   "php/7.4-cli"
   "php/7.4-fpm"
-  "varnish/6.2"
-  "web"
+  "varnish/latest"
+  "nginx/latest"
 )
 
 mcd_docker_build() {
   local image
   for image in "${mcd_images[@]}"; do
-    pushd "images/$image"
+    if [[ "$image" == "nginx/latest" ]]; then
+      pushd "images/web" > /dev/null
+    elif [[ "$image" == "varnish/latest" ]]; then
+      pushd "images/varnish/6.2" > /dev/null
+    else
+      pushd "images/$image" > /dev/null
+    fi
     tag="pmetpublic/magento-cloud-docker-${image/\//:}-$composer_major_minor_ver-$git_short_ver"
+    # echo "$tag"
     docker build . --tag "$tag" > "docker-build-${image/\//-}-$composer_major_minor_ver-$git_short_ver.log"
-    popd
+    popd > /dev/null
   done
 }
 

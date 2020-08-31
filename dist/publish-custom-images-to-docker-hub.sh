@@ -17,14 +17,16 @@ images=(
   "varnish/6.2"
   "web"
 )
+
 for image in "${images[@]}"; do
   pushd "images/$image"
   tag="pmetpublic/magento-cloud-docker-${image/\//:}-$composer_major_minor_ver-$git_short_ver"
-  docker build . --tag "$tag"
+  docker build . --tag "$tag" > "docker-build-$tag.log"
   popd
 done
 
 # only push if all successfully built
 for image in "${images[@]}"; do
+  tag="pmetpublic/magento-cloud-docker-${image/\//:}-$composer_major_minor_ver-$git_short_ver"
   docker push "$tag"
 done

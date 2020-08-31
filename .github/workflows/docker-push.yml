@@ -1,0 +1,16 @@
+name: build and push to Docker Hub
+on:
+  push:
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: build and push images
+        run: |
+          composer update
+          echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
+          ./dist/push-custom-images-to-docker-hub.sh
+      - name: keep alive to debug
+        if: ${{ failure() }}
+        uses: PMET-public/action-tmate@master

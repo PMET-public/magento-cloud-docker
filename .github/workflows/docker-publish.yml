@@ -24,7 +24,7 @@ jobs:
       - name: build images
         run: |
           composer update
-          . ./dist/publish-custom-images-to-docker-hub.sh && mcd_docker_build
+          . ./dist/docker-image-management.sh && mcd_docker_build
 
       # test on sample magento-cloud project
       - uses: actions/checkout@v2

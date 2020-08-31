@@ -1,20 +1,57 @@
 name: build and publish to Docker Hub
+
 on:
   push:
+    branches:
+      - merging
+  schedule:
+    # noon utc / 8am ET every mon
+    - cron: '0 12 * * 1'
+
 env:
-  IMAGE_NAME: image
-  TMATE_AUTHORIZED_KEYS_URL: ${{ secrets.TMATE_AUTHORIZED_KEYS_URL }}
+  TERM: xterm
+  COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH }}
   SLACK_WEBHOOK_URL_FOR_TMATE_FROM_GITHUB_WORKFLOW: ${{ secrets.SLACK_WEBHOOK_URL_FOR_TMATE_FROM_GITHUB_WORKFLOW }}
+  TMATE_AUTHORIZED_KEYS_URL: ${{ secrets.TMATE_AUTHORIZED_KEYS_URL }}
+
 jobs:
-  build-and-publish:
+  build-test-publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: build and publish images
+
+      # build
+      - name: build images
         run: |
           composer update
+          . ./dist/publish-custom-images-to-docker-hub.sh && mcd_docker_build
+
+      # test on sample magento-cloud project
+      - uses: actions/checkout@v2
+        with:
+          repository: PMET-public/magento-cloud
+          ref: master
+          path: mc
+      - uses: actions/checkout@v2
+        with:
+          repository: 'PMET-public/mdm'
+          submodules: 'true'
+          ref: develop
+          path: 'mc/mdm'
+      - name: bats tests
+        run: |
+          export OVERRIDE_MCD_IMAGE_VERSION="$(git rev-parse --short HEAD)"
+          cd mc/mdm
+          ./tests/libs/bats/bin/bats -T ./tests/dockerize-then-run-magento-app/all/1-install-mdm-and-create-magento-app.bats
+      
+      # publish
+      - name: publish imags
+        if: ${{ github.event_name != 'schedule' }}
+        run: |
           echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
-          ./dist/publish-custom-images-to-docker-hub.sh
+          . ./dist/publish-custom-images-to-docker-hub.sh && mcd_docker_publish
+
+      # debug
       - name: keep alive to debug
         if: ${{ failure() }}
         uses: PMET-public/action-tmate@master

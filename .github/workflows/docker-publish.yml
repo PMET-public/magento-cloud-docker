@@ -29,19 +29,15 @@ jobs:
       # test on sample magento-cloud project
       - uses: actions/checkout@v2
         with:
-          repository: PMET-public/magento-cloud
-          ref: master
-          path: mc
-      - uses: actions/checkout@v2
-        with:
           repository: 'PMET-public/mdm'
           submodules: 'true'
           ref: new-features # when stable, update this to stable ref
-          path: 'mc/mdm'
+          path: 'mdm'
       - name: bats tests
         run: |
           export OVERRIDE_MCD_IMAGE_VERSION="$(git rev-parse --short HEAD)"
-          cd mc/mdm
+          cd mdm
+          MDM_REPO_DIR="$PWD"
           ./tests/libs/bats/bin/bats -T ./tests/3-dockerize-then-run-magento-app/all/1-install-mdm-and-create-magento-app.bats
       
       # publish

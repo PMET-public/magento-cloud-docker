@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -xe
+set -e
 
 git_short_ver="$(git rev-parse --short HEAD)"
 composer_major_minor_ver="$(perl -0777 -ne '/version"\s*:\s*"([^"]+)\./ and print $1' composer.json)"
@@ -30,15 +30,17 @@ mcd_docker_build() {
     fi
     tag="pmetpublic/magento-cloud-docker-${image/\//:}-$composer_major_minor_ver-$git_short_ver"
     # echo "$tag"
-    docker build . --tag "$tag" > "docker-build-${image/\//-}-$composer_major_minor_ver-$git_short_ver.log"
+    docker build . --tag "$tag" > "docker-build-${image/\//-}-$composer_major_minor_ver-$git_short_ver.log" &
     popd > /dev/null
   done
+  wait
 }
 
 mcd_docker_publish() {
   local image
   for image in "${mcd_images[@]}"; do
     tag="pmetpublic/magento-cloud-docker-${image/\//:}-$composer_major_minor_ver-$git_short_ver"
-    docker push "$tag"
+    docker push "$tag" &
   done
+  wait
 }

@@ -36,14 +36,13 @@ jobs:
         with:
           repository: 'PMET-public/mdm'
           submodules: 'true'
-          ref: develop
+          ref: new-features # when stable, update this to stable ref
           path: 'mc/mdm'
       - name: bats tests
         run: |
           export OVERRIDE_MCD_IMAGE_VERSION="$(git rev-parse --short HEAD)"
           cd mc/mdm
-          export MDM_REPO_DIR="$PWD"
-          ./tests/libs/bats/bin/bats -T ./tests/dockerize-then-run-magento-app/all/1-install-mdm-and-create-magento-app.bats
+          ./tests/libs/bats/bin/bats -T ./tests/3-dockerize-then-run-magento-app/all/1-install-mdm-and-create-magento-app.bats
       
       # publish
       - name: publish imags

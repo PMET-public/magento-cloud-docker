@@ -16,12 +16,18 @@
       }
     },
     {
-      "name": "Launch currently open script",
+      "name": "Launch currently open php script",
       "type": "php",
       "request": "launch",
       "program": "${file}",
       "cwd": "${fileDirname}",
       "port": 9000
+    },
+    {
+      "type": "bashdb",
+      "request": "launch",
+      "name": "Launch currently open bash script",
+      "program": "${file}"
     }
   ]
 }

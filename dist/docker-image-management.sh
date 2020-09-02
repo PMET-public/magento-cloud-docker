@@ -26,26 +26,6 @@ tag_prefixes["images/php/7.4-fpm"]="$org_image_prefix-php:7.4-fpm"
 tag_prefixes["images/varnish/6.2"]="$org_image_prefix-varnish:latest"
 tag_prefixes["images/web"]="$org_image_prefix-nginx:latest"
 
-# docker_build_images() {
-#   local path_key
-#   for path_key in "${!tag_prefixes[@]}"; do
-#     pushd "$path_key" > /dev/null
-#     tag="${tag_prefixes[$path_key]}-$composer_major_minor_ver-$git_short_ver"
-#     docker build . --tag "$tag" > "/tmp/docker-build-${path_key//\//-}-$composer_major_minor_ver-$git_short_ver.log" &
-#     popd > /dev/null
-#   done
-#   wait
-# }
-
-# docker_tag_built_images_with_latest() {
-#   for path_key in "${!tag_prefixes[@]}"; do
-#     pushd "$path_key" > /dev/null
-#     tag="${tag_prefixes[$path_key]}-$composer_major_minor_ver-$git_short_ver"
-#     latest_tag="${tag/-$git_short_ver/-latest}"
-#     docker tag "$tag" "$latest_tag" &
-#   done
-# }
-
 red='\033[0;31m'
 no_color='\033[0m'
 error() {

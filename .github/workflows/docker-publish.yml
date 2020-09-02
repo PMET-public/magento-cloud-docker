@@ -37,11 +37,11 @@ jobs:
         run: |
           export OVERRIDE_MCD_IMAGE_VERSION="$(git rev-parse --short HEAD)"
           cd mdm
-          MDM_REPO_DIR="$PWD"
+          export MDM_REPO_DIR="$PWD"
           ./tests/libs/bats/bin/bats -T ./tests/3-dockerize-then-run-magento-app/all/1-install-mdm-and-create-magento-app.bats
       
       # publish
-      - name: publish imags
+      - name: publish images
         if: ${{ github.event_name != 'schedule' }}
         run: |
           echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin

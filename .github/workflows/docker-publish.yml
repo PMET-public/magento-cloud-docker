@@ -24,7 +24,7 @@ jobs:
       - name: build images
         run: |
           composer update
-          . ./dist/docker-image-management.sh && mcd_docker_build
+          . ./dist/docker-image-management.sh && build_changed_pull_and_tag_unchanged_Dockerfiles
 
       # test on sample magento-cloud project
       - uses: actions/checkout@v2
@@ -45,7 +45,7 @@ jobs:
         if: ${{ github.event_name != 'schedule' }}
         run: |
           echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
-          . ./dist/publish-custom-images-to-docker-hub.sh && mcd_docker_publish
+          . ./dist/docker-image-management.sh && docker_publish_all_mcd_tagged_images
 
       # debug
       - name: keep alive to debug

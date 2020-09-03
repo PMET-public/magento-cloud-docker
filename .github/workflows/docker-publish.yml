@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v2
 
       # build
-      - name: build images
+      - name: build or pull images
         run: |
           composer update
           . ./dist/docker-image-management.sh && build_changed_pull_and_tag_unchanged_Dockerfiles
@@ -35,9 +35,8 @@ jobs:
           path: 'mdm'
       - name: bats tests
         run: |
-          export OVERRIDE_MCD_IMAGE_VERSION="$(git rev-parse --short HEAD)"
           cd mdm
-          export MDM_REPO_DIR="$PWD"
+          export MDM_REPO_DIR="$PWD" OVERRIDE_MCD_IMAGE_VERSION="$(git rev-parse --short HEAD)"
           ./tests/libs/bats/bin/bats -T ./tests/3-dockerize-then-run-magento-app/all/1-install-mdm-and-create-magento-app.bats
       
       # publish
